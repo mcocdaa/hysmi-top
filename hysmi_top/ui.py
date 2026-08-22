@@ -196,26 +196,26 @@ class HySmiTop:
                 last_update = now
             time.sleep(0.05)
 
-    def _layout(self, maxy: int, maxx: int, ndev: int) -> tuple[int, int, int]:
+    def _layout(self, maxy: int, maxx: int, ndev: int) -> tuple[int, int, int, int]:
         """Fit ``ndev`` device blocks into the terminal.
 
-        Returns ``(per_row, chart_h, nrows)``. Curve height fills all the
-        available vertical space below the header (capped by ``chart_h`` if
-        one was requested); if blocks overflow, Y is compressed first down to
-        1 row, then X is compressed by adding columns (up to one per device).
+        Returns ``(per_row, nrows, base_block_h, extra_rows)``: every block
+        row gets ``base_block_h`` rows plus one extra row for the first
+        ``extra_rows`` block rows, so the whole height is used with no gaps.
+        If blocks cannot fit even at the minimum block height, ``base_block_h``
+        is below 4 and the caller shows an overflow message.
         """
-        avail_h = maxy - 3
+        avail_h = maxy - 2
         per_row = min(ndev, max(1, maxx // MIN_BLOCK_W))
         while True:
             nrows = (ndev + per_row - 1) // per_row
-            fit = (avail_h // nrows) - 3
-            if fit >= 1:
-                chart_h = fit if self.chart_h is None else min(fit, self.chart_h)
-                return per_row, chart_h, nrows
+            base = avail_h // nrows
+            if base >= 4:
+                return per_row, nrows, base, avail_h % nrows
             if per_row < ndev:
                 per_row = min(ndev, per_row * 2)
                 continue
-            return per_row, 1, nrows
+            return per_row, nrows, base, 0
 
     def _draw(self, scr, utf8: bool, colors: dict[str, int]) -> None:
         scr.erase()
@@ -247,15 +247,20 @@ class HySmiTop:
         if not devs:
             put(row, 0, "no HCU devices found", "err")
             return
-        per_row, chart_h, nrows = self._layout(maxy, maxx, len(devs))
-        block_h = 2 + chart_h + 1
-        gap_w, width = _pod_layout(maxx, per_row)
-        stride = width + gap_w
-        if nrows * block_h > maxy - 3:
+        per_row, nrows, base, extra = self._layout(maxy, maxx, len(devs))
+        if base < 4:
             put(row, 0, f"terminal too small for {len(devs)} cards; enlarge window", "err")
             return
+        gap_w, width = _pod_layout(maxx, per_row)
+        stride = width + gap_w
         for i, s in enumerate(sorted(devs, key=lambda x: x.hcu_id)):
-            self._draw_block(scr, s, row + (i // per_row) * block_h, (i % per_row) * stride,
+            brow = i // per_row
+            block_h = base + (1 if brow < extra else 0)
+            top = row + brow * base + min(brow, extra)
+            chart_h = block_h - 3
+            if self.chart_h is not None:
+                chart_h = min(chart_h, self.chart_h)
+            self._draw_block(scr, s, top, (i % per_row) * stride,
                              width, chart_h, utf8, put)
 
     def _draw_block(self, scr, s: HcuStats, top: int, left: int, width: int,

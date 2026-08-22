@@ -158,34 +158,30 @@ class LayoutTest(unittest.TestCase):
     def make(self, chart_h: int | None = None) -> HySmiTop:
         return HySmiTop(self.DEVICES, 1000, chart_h)
 
-    def test_tall_window_grows_chart_to_fill(self):
-        per_row, chart_h, nrows = self.make()._layout(40, 120, 8)
-        self.assertEqual((per_row, chart_h, nrows), (4, 15, 2))
-        self.assertEqual((2 + chart_h + 1) * nrows, 36)  # fills 37 avail rows
+    def used_rows(self, maxy: int, maxx: int, ndev: int) -> int:
+        per_row, nrows, base, extra = self.make()._layout(maxy, maxx, ndev)
+        return 2 + nrows * base + extra if base >= 4 else -1
+
+    def test_layout_fills_every_row(self):
+        for maxy in range(6, 60):
+            for maxx in (60, 80, 120, 200):
+                used = self.used_rows(maxy, maxx, 8)
+                if used != -1:
+                    self.assertEqual(used, maxy, f"gap at {maxy}x{maxx}")
+
+    def test_tall_window_spreads_extra_rows(self):
+        self.assertEqual(self.make()._layout(40, 120, 8), (4, 2, 19, 0))
+        self.assertEqual(self.make()._layout(45, 120, 8), (4, 2, 21, 1))
 
     def test_short_window_compresses_y(self):
-        per_row, chart_h, nrows = self.make()._layout(20, 80, 8)
-        self.assertEqual((per_row, chart_h, nrows), (2, 1, 4))
-        self.assertEqual((2 + chart_h + 1) * nrows, 16)  # fits in 17 avail rows
+        self.assertEqual(self.make()._layout(20, 80, 8), (2, 4, 4, 2))
 
     def test_very_short_window_compresses_x_then_y(self):
-        per_row, chart_h, nrows = self.make()._layout(12, 80, 8)
-        self.assertEqual((per_row, chart_h, nrows), (4, 1, 2))
-        self.assertEqual((2 + chart_h + 1) * nrows, 8)  # fits in 9 avail rows
-
-    def test_all_in_one_row_when_wide(self):
-        per_row, chart_h, nrows = self.make()._layout(10, 200, 8)
-        self.assertEqual((per_row, chart_h, nrows), (8, 4, 1))
-        self.assertEqual((2 + chart_h + 1) * nrows, 7)  # fits in 7 avail rows
+        self.assertEqual(self.make()._layout(12, 80, 8), (4, 2, 5, 0))
 
     def test_tiny_window_reports_overflow(self):
-        per_row, chart_h, nrows = self.make()._layout(6, 80, 8)
-        self.assertGreater((2 + chart_h + 1) * nrows, 6 - 3)  # cannot fit
-
-    def test_requested_chart_height_is_cap(self):
-        app = self.make(chart_h=2)
-        per_row, chart_h, nrows = app._layout(40, 120, 8)
-        self.assertEqual((per_row, chart_h, nrows), (4, 2, 2))  # capped, does not fill
+        per_row, nrows, base, extra = self.make()._layout(5, 80, 8)
+        self.assertLess(base, 4)  # cannot fit even at minimum block height
 
 
 if __name__ == "__main__":

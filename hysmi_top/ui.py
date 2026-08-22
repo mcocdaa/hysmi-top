@@ -21,6 +21,8 @@ MIN_BLOCK_W = 28
 _BRAILLE = 0x2800
 _DOT_BITS = ((1, 8), (2, 16), (4, 32), (64, 128))
 
+MIX_OWNER = -1  # owner marker: cell contains dots of two or more curves
+
 _CURVE_COLORS = ("util", "vram", "proc", "title", "header", "status")
 
 
@@ -88,21 +90,35 @@ def render_overlay(series_list: list[deque[float]], width: int, height: int, utf
         cells: list[tuple[str, int | None]] = []
         for c in range(width):
             mask = 0
-            own = 0
+            owners: set[int] = set()
             for dr in range(4):
                 for dc in range(2):
                     o = owner[g * 4 + dr][c * 2 + dc]
                     if o:
                         mask |= _DOT_BITS[dr][dc]
-                        if own == 0:
-                            own = o
+                        owners.add(o)
             if mask:
+                own: int | None = (owners.pop() - 1) if len(owners) == 1 else MIX_OWNER
                 ch = chr(_BRAILLE + mask) if utf8 else "*"
-                cells.append((ch, own - 1))
+                cells.append((ch, own))
             else:
                 cells.append((" ", None))
         rows.append(cells)
     return rows
+
+
+def _pod_layout(maxx: int, per_row: int) -> tuple[int, int]:
+    """Distribute the row into pods separated by gaps.
+
+    Returns ``(gap_w, pod_width)``: roughly 10% of the terminal width goes to
+    inter-pod gaps, split evenly across the ``per_row - 1`` gaps.
+    """
+    if per_row <= 1:
+        return 0, maxx
+    gap_w = max(1, int(maxx * 0.1) // (per_row - 1))
+    gap_w = min(gap_w, maxx // 2)
+    width = (maxx - gap_w * (per_row - 1)) // per_row
+    return gap_w, width
 
 
 def _fmt_mem(bytes_: int) -> str:
@@ -123,7 +139,7 @@ def _init_colors() -> dict[str, int]:
     curses.use_default_colors()
     pairs = {
         "title": 1, "header": 2, "util": 3, "vram": 4, "status": 5,
-        "proc": 6, "dim": 7, "err": 8,
+        "proc": 6, "dim": 7, "err": 8, "mix": 9,
     }
     curses.init_pair(pairs["title"], curses.COLOR_CYAN, -1)
     curses.init_pair(pairs["header"], curses.COLOR_WHITE, -1)
@@ -133,6 +149,7 @@ def _init_colors() -> dict[str, int]:
     curses.init_pair(pairs["proc"], curses.COLOR_CYAN, -1)
     curses.init_pair(pairs["dim"], curses.COLOR_BLACK, -1)
     curses.init_pair(pairs["err"], curses.COLOR_RED, -1)
+    curses.init_pair(pairs["mix"], curses.COLOR_BLUE, -1)
     return pairs
 
 
@@ -239,12 +256,13 @@ class HySmiTop:
             return
         per_row, chart_h, nrows = self._layout(maxy, maxx, len(devs))
         block_h = 2 + chart_h + 1
-        width = maxx // per_row
+        gap_w, width = _pod_layout(maxx, per_row)
+        stride = width + gap_w
         if nrows * block_h > maxy - 3:
             put(row, 0, f"terminal too small for {len(devs)} cards; enlarge window", "err")
             return
         for i, s in enumerate(sorted(devs, key=lambda x: x.hcu_id)):
-            self._draw_block(scr, s, row + (i // per_row) * block_h, (i % per_row) * width,
+            self._draw_block(scr, s, row + (i // per_row) * block_h, (i % per_row) * stride,
                              width, chart_h, utf8, put)
 
         if self.show_procs and self.procs:
@@ -271,6 +289,8 @@ class HySmiTop:
         put(top, x, "HCU%", "header", right); x += 4
         put(top, x, " \u2500", "vram", right); x += 2
         put(top, x, "VRAM%", "header", right); x += 5
+        put(top, x, " \u2500", "mix", right); x += 2
+        put(top, x, "mix", "header", right); x += 3
         put(top, x, f" u={s.util_percent:4.1f}%", "status", right)
 
         chart = render_overlay([self.util[s.hcu_id], self.vram[s.hcu_id]], chart_w, chart_h, utf8)
@@ -283,7 +303,12 @@ class HySmiTop:
                 j = i
                 while j < len(cells) and cells[j][1] == owner:
                     j += 1
-                color = _CURVE_COLORS[owner] if owner is not None else "dim"
+                if owner is None:
+                    color = "dim"
+                elif owner == MIX_OWNER:
+                    color = "mix"
+                else:
+                    color = _CURVE_COLORS[owner]
                 put(y, x, "".join(cells[k][0] for k in range(i, j)), color, right)
                 x += j - i
                 i = j

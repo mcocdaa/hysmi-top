@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest import mock
 
 from hysmi_top import collect
-from hysmi_top.ui import HySmiTop, _fmt_mem, render_overlay
+from hysmi_top.ui import HySmiTop, MIX_OWNER, _fmt_mem, _pod_layout, render_overlay
 
 
 def make_sysfs(tmp: Path, ncards: int = 2) -> None:
@@ -122,6 +122,23 @@ class UiTest(unittest.TestCase):
         owners = {rows[r][c][1] for r in range(4) for c in range(4)}
         self.assertIn(0, owners)  # low curve (vram=0) present
         self.assertIn(1, owners)  # high curve (vram=100) present
+
+    def test_overlay_merged_mix(self):
+        # two close series landing in the same braille cell band -> blue mix
+        rows = render_overlay(
+            [deque([60.0] * 8), deque([65.0] * 8)], width=4, height=4, utf8=True
+        )
+        owners = {rows[r][c][1] for r in range(4) for c in range(4)}
+        self.assertIn(MIX_OWNER, owners)
+        self.assertNotIn(0, owners)
+        self.assertNotIn(1, owners)
+
+    def test_pod_layout(self):
+        self.assertEqual(_pod_layout(80, 1), (0, 80))
+        self.assertEqual(_pod_layout(80, 2), (8, 36))
+        self.assertEqual(_pod_layout(120, 3), (6, 36))
+        self.assertEqual(_pod_layout(50, 2), (5, 22))
+        self.assertEqual(_pod_layout(24, 4), (1, 5))
 
     def test_fmt_mem(self):
         self.assertEqual(_fmt_mem(64 * 1024**3), "64.0G")

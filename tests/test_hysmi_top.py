@@ -123,7 +123,7 @@ class UiTest(unittest.TestCase):
         self.assertIn(0, owners)  # low curve (vram=0) present
         self.assertIn(1, owners)  # high curve (vram=100) present
 
-    def test_overlay_merged_mix(self):
+    def test_overlay_merged_mix_single_dot(self):
         # two close series landing in the same braille cell band -> blue mix
         rows = render_overlay(
             [deque([60.0] * 8), deque([65.0] * 8)], width=4, height=4, utf8=True
@@ -132,6 +132,12 @@ class UiTest(unittest.TestCase):
         self.assertIn(MIX_OWNER, owners)
         self.assertNotIn(0, owners)
         self.assertNotIn(1, owners)
+        # every merged cell must be a single dot, not a double dot
+        for r in range(4):
+            for c in range(4):
+                ch, owner = rows[r][c]
+                if owner == MIX_OWNER:
+                    self.assertEqual(bin(ord(ch) - 0x2800).count("1"), 1)
 
     def test_pod_layout(self):
         self.assertEqual(_pod_layout(80, 1), (0, 80))
@@ -152,10 +158,10 @@ class LayoutTest(unittest.TestCase):
     def make(self, chart_h: int = 4) -> HySmiTop:
         return HySmiTop(self.DEVICES, 1000, chart_h)
 
-    def test_tall_window_keeps_default_chart(self):
+    def test_tall_window_grows_chart_to_fill(self):
         per_row, chart_h, nrows = self.make()._layout(40, 120, 8)
-        self.assertEqual((per_row, chart_h, nrows), (4, 4, 2))
-        self.assertEqual((2 + chart_h + 1) * nrows, 14)
+        self.assertEqual((per_row, chart_h, nrows), (4, 8, 2))
+        self.assertEqual((2 + chart_h + 1) * nrows, 22)  # fits in 37 avail rows
 
     def test_short_window_compresses_y(self):
         per_row, chart_h, nrows = self.make()._layout(20, 80, 8)
@@ -176,10 +182,10 @@ class LayoutTest(unittest.TestCase):
         per_row, chart_h, nrows = self.make()._layout(6, 80, 8)
         self.assertGreater((2 + chart_h + 1) * nrows, 6 - 3)  # cannot fit
 
-    def test_requested_chart_height_is_cap(self):
+    def test_requested_chart_height_is_minimum(self):
         app = self.make(chart_h=2)
         per_row, chart_h, nrows = app._layout(40, 120, 8)
-        self.assertEqual(chart_h, 2)
+        self.assertGreaterEqual(chart_h, 2)  # grows to fill screen, never below request
 
 
 if __name__ == "__main__":

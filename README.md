@@ -4,20 +4,20 @@
 多条曲线（HCU 利用率、VRAM 占用）以**滚动线条**叠加显示，风格类似 nvtop。
 
 零第三方依赖（仅 Python 标准库：`curses`），读取内核 sysfs 数据，无需
-root、不轮询起子进程（进程列表除外）。
+root、不轮询起子进程。
 
 ## 功能
 
-- 多卡网格布局，每卡一个图表块，**自适应窗口尺寸**：窗口矮时自动压缩曲线高度
-  （Y 方向），仍放不下则增加每行列数（X 方向），resize 后自动重排
+- 多卡网格布局，每卡一个图表块，**自适应窗口尺寸**：曲线高度填满可用屏幕
+  （上限 8 行），窗口矮时自动压缩曲线高度（Y 方向），仍放不下则增加每行
+  列数（X 方向），resize 后自动重排
 - 叠加滚动曲线：`─HCU%`（利用率，绿）与 `─VRAM%`（显存占用，品红）画在同一张图；
-  两线在同一单元格重合时合并为蓝色，避免出现"双线"
+  两线在同一单元格重合时合并为单个蓝色点，避免出现"双线"
 - 每个设备是一个 pod（表头/图例 + 曲线 + 状态行），pod 之间按终端宽度 ~10%
   动态分配间距（`总宽×0.1 ÷ 间隙数`）
 - 曲线用盲文点阵渲染成平滑连续线条（非实体块），UTF-8 终端下自动启用
 - 每卡实时状态：利用率、显存用量/总量、温度、功耗
-- 进程列表（解析 `hy-smi --showpids`，进程名取自 /proc）
-- `--once` 文本快照与 `--json` 输出，便于脚本化
+- `--once` 文本快照与 `--json` 输出（含 `hy-smi --showpids` 进程信息），便于脚本化
 
 ## 环境要求
 
@@ -39,7 +39,7 @@ python3 -m hysmi_top --once
 python3 -m hysmi_top --once --json
 ```
 
-键盘：`q` 退出，`+`/`-` 调整刷新速度，`p` 开关进程列表。
+键盘：`q` 退出，`+`/`-` 调整刷新速度。
 
 ## 安装（可选）
 
@@ -59,4 +59,4 @@ python3 -m unittest discover -s tests
 - 每卡指标：`/sys/class/drm/cardN/device/` 下的 `gpu_busy_percent`、
   `mem_info_vram_used/total`、`hwmon/*/temp1_input`、`power1_average`、
   `freq1_input`、`freq2_input`（与 hy-smi 同源，直读更快）
-- 进程：`hy-smi --showpids`
+- 进程（仅 `--once`/`--json` 快照）：`hy-smi --showpids`

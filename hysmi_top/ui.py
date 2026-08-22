@@ -11,11 +11,10 @@ import locale
 import time
 from collections import deque
 
-from .collect import HcuProcess, HcuStats, collect_all, read_processes
+from .collect import HcuStats, collect_all
 
 DEFAULT_CHART_H = 4
 DEFAULT_REFRESH_MS = 1000
-PROC_REFRESH_S = 5.0
 MIN_BLOCK_W = 28
 
 _BRAILLE = 0x2800
@@ -89,18 +88,26 @@ def render_overlay(series_list: list[deque[float]], width: int, height: int, utf
     for g in range(height):
         cells: list[tuple[str, int | None]] = []
         for c in range(width):
-            mask = 0
             owners: set[int] = set()
+            top_dot = 0
             for dr in range(4):
                 for dc in range(2):
                     o = owner[g * 4 + dr][c * 2 + dc]
                     if o:
-                        mask |= _DOT_BITS[dr][dc]
                         owners.add(o)
-            if mask:
-                own: int | None = (owners.pop() - 1) if len(owners) == 1 else MIX_OWNER
-                ch = chr(_BRAILLE + mask) if utf8 else "*"
-                cells.append((ch, own))
+                        if top_dot == 0:
+                            top_dot = _DOT_BITS[dr][dc]
+            if owners:
+                if len(owners) > 1:
+                    # merged curves: collapse to a single dot
+                    cells.append((chr(_BRAILLE + top_dot) if utf8 else "*", MIX_OWNER))
+                else:
+                    mask = 0
+                    for dr in range(4):
+                        for dc in range(2):
+                            if owner[g * 4 + dr][c * 2 + dc]:
+                                mask |= _DOT_BITS[dr][dc]
+                    cells.append((chr(_BRAILLE + mask) if utf8 else "*", owners.pop() - 1))
             else:
                 cells.append((" ", None))
         rows.append(cells)
@@ -159,9 +166,6 @@ class HySmiTop:
         self.util: dict[int, deque[float]] = {d: deque(maxlen=512) for d in device_ids}
         self.vram: dict[int, deque[float]] = {d: deque(maxlen=512) for d in device_ids}
         self.last_stats: dict[int, HcuStats] = {}
-        self.procs: list[HcuProcess] = []
-        self.proc_ts = 0.0
-        self.show_procs = True
 
     def poll(self) -> None:
         stats = collect_all(self.device_ids)
@@ -169,10 +173,6 @@ class HySmiTop:
             self.last_stats[s.hcu_id] = s
             self.util[s.hcu_id].append(s.util_percent)
             self.vram[s.hcu_id].append(s.vram_percent)
-        now = time.time()
-        if now - self.proc_ts >= PROC_REFRESH_S:
-            self.procs = read_processes()
-            self.proc_ts = now
 
     def run(self, scr) -> int:
         curses.curs_set(0)
@@ -189,8 +189,6 @@ class HySmiTop:
                 self.refresh_ms = max(200, self.refresh_ms - 200)
             if key in (ord("-"), ord("_")):
                 self.refresh_ms = min(10000, self.refresh_ms + 200)
-            if key in (ord("p"), ord("P")):
-                self.show_procs = not self.show_procs
             if now - last_update >= self.refresh_ms / 1000.0:
                 self.poll()
                 self._draw(scr, utf8, colors)
@@ -201,26 +199,22 @@ class HySmiTop:
     def _layout(self, maxy: int, maxx: int, ndev: int) -> tuple[int, int, int]:
         """Fit ``ndev`` device blocks into the terminal.
 
-        Returns ``(per_row, chart_h, nrows)``. Y is compressed first by
-        shrinking the curve height down to 1 row; if blocks still overflow,
-        X is compressed by adding columns (up to one per device).
+        Returns ``(per_row, chart_h, nrows)``. Curve height fills the
+        available vertical space (up to 8 rows); if blocks overflow, Y is
+        compressed first down to 1 row, then X is compressed by adding
+        columns (up to one per device).
         """
         avail_h = maxy - 3
         per_row = min(ndev, max(1, maxx // MIN_BLOCK_W))
-        chart_h = self.chart_h
         while True:
             nrows = (ndev + per_row - 1) // per_row
-            block_h = 2 + chart_h + 1
-            if nrows * block_h <= avail_h:
-                return per_row, chart_h, nrows
-            if chart_h > 1:
-                chart_h -= 1
-                continue
+            fit = (avail_h // nrows) - 3
+            if fit >= 1:
+                return per_row, min(max(self.chart_h, 8), fit), nrows
             if per_row < ndev:
                 per_row = min(ndev, per_row * 2)
-                chart_h = self.chart_h
                 continue
-            return per_row, chart_h, nrows
+            return per_row, 1, nrows
 
     def _draw(self, scr, utf8: bool, colors: dict[str, int]) -> None:
         scr.erase()
@@ -246,7 +240,7 @@ class HySmiTop:
 
         row = 0
         put(row, 0, "hysmi-top  -  Hygon DCU monitor", "title"); row += 1
-        put(row, 0, "q:quit  +/-:speed  p:processes", "dim"); row += 1
+        put(row, 0, "q:quit  +/-:speed", "dim"); row += 1
 
         devs = [s for s in self.last_stats.values()]
         if not devs:
@@ -262,15 +256,6 @@ class HySmiTop:
         for i, s in enumerate(sorted(devs, key=lambda x: x.hcu_id)):
             self._draw_block(scr, s, row + (i // per_row) * block_h, (i % per_row) * stride,
                              width, chart_h, utf8, put)
-
-        if self.show_procs and self.procs:
-            start_y = row + nrows * block_h
-            avail = maxy - start_y - 1
-            if avail > 1:
-                shown = self.procs[:avail]
-                put(start_y, 0, "- processes (hy-smi --showpids) -", "proc")
-                for j, p in enumerate(shown):
-                    put(start_y + 1 + j, 0, f"{p.pid:>8}  {p.name}", "proc")
 
     def _draw_block(self, scr, s: HcuStats, top: int, left: int, width: int,
                     chart_h: int, utf8: bool, put) -> None:

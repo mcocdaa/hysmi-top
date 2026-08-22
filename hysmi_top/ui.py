@@ -16,6 +16,7 @@ from .collect import HcuProcess, HcuStats, collect_all, read_processes
 DEFAULT_CHART_H = 4
 DEFAULT_REFRESH_MS = 1000
 PROC_REFRESH_S = 5.0
+MIN_BLOCK_W = 28
 
 _BRAILLE = 0x2800
 _DOT_BITS = ((1, 8), (2, 16), (4, 32), (64, 128))
@@ -182,10 +183,34 @@ class HySmiTop:
                 last_update = now
             time.sleep(0.05)
 
+    def _layout(self, maxy: int, maxx: int, ndev: int) -> tuple[int, int, int]:
+        """Fit ``ndev`` device blocks into the terminal.
+
+        Returns ``(per_row, chart_h, nrows)``. Y is compressed first by
+        shrinking the curve height down to 1 row; if blocks still overflow,
+        X is compressed by adding columns (up to one per device).
+        """
+        avail_h = maxy - 3
+        per_row = min(ndev, max(1, maxx // MIN_BLOCK_W))
+        chart_h = self.chart_h
+        while True:
+            nrows = (ndev + per_row - 1) // per_row
+            block_h = 2 + chart_h + 1
+            if nrows * block_h <= avail_h:
+                return per_row, chart_h, nrows
+            if chart_h > 1:
+                chart_h -= 1
+                continue
+            if per_row < ndev:
+                per_row = min(ndev, per_row * 2)
+                chart_h = self.chart_h
+                continue
+            return per_row, chart_h, nrows
+
     def _draw(self, scr, utf8: bool, colors: dict[str, int]) -> None:
         scr.erase()
         maxy, maxx = scr.getmaxyx()
-        if maxy < 8 or maxx < 30:
+        if maxy < 6 or maxx < 12:
             scr.addstr(0, 0, "terminal too small")
             return
 
@@ -212,15 +237,18 @@ class HySmiTop:
         if not devs:
             put(row, 0, "no HCU devices found", "err")
             return
-        per_row = max(1, min(len(devs), max(1, maxx // 32)))
-        block_h = 2 + self.chart_h + 1
+        per_row, chart_h, nrows = self._layout(maxy, maxx, len(devs))
+        block_h = 2 + chart_h + 1
         width = maxx // per_row
+        if nrows * block_h > maxy - 3:
+            put(row, 0, f"terminal too small for {len(devs)} cards; enlarge window", "err")
+            return
         for i, s in enumerate(sorted(devs, key=lambda x: x.hcu_id)):
             self._draw_block(scr, s, row + (i // per_row) * block_h, (i % per_row) * width,
-                             width, utf8, put)
+                             width, chart_h, utf8, put)
 
         if self.show_procs and self.procs:
-            start_y = row + block_h * ((len(devs) + per_row - 1) // per_row)
+            start_y = row + nrows * block_h
             avail = maxy - start_y - 1
             if avail > 1:
                 shown = self.procs[:avail]
@@ -229,7 +257,7 @@ class HySmiTop:
                     put(start_y + 1 + j, 0, f"{p.pid:>8}  {p.name}", "proc")
 
     def _draw_block(self, scr, s: HcuStats, top: int, left: int, width: int,
-                    utf8: bool, put) -> None:
+                    chart_h: int, utf8: bool, put) -> None:
         right = left + width
         chart_w = max(4, width - 2)
         hdr = f"HCU {s.hcu_id}"
@@ -245,7 +273,7 @@ class HySmiTop:
         put(top, x, "VRAM%", "header", right); x += 5
         put(top, x, f" u={s.util_percent:4.1f}%", "status", right)
 
-        chart = render_overlay([self.util[s.hcu_id], self.vram[s.hcu_id]], chart_w, self.chart_h, utf8)
+        chart = render_overlay([self.util[s.hcu_id], self.vram[s.hcu_id]], chart_w, chart_h, utf8)
         for r, cells in enumerate(chart):
             y = top + 1 + r
             x = left
@@ -260,4 +288,4 @@ class HySmiTop:
                 x += j - i
                 i = j
         status = f"v={_fmt_mem(s.vram_used)}/{_fmt_mem(s.vram_total)}  {s.temp_c:4.1f}C {s.power_w:5.1f}W"
-        put(top + 1 + self.chart_h, left, status, "status", right)
+        put(top + 1 + chart_h, left, status, "status", right)

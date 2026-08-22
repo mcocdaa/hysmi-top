@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest import mock
 
 from hysmi_top import collect
-from hysmi_top.ui import _fmt_mem, render_overlay
+from hysmi_top.ui import HySmiTop, _fmt_mem, render_overlay
 
 
 def make_sysfs(tmp: Path, ncards: int = 2) -> None:
@@ -126,6 +126,42 @@ class UiTest(unittest.TestCase):
     def test_fmt_mem(self):
         self.assertEqual(_fmt_mem(64 * 1024**3), "64.0G")
         self.assertEqual(_fmt_mem(2 * 1024**3), "2.00G")
+
+
+class LayoutTest(unittest.TestCase):
+    DEVICES = list(range(8))
+
+    def make(self, chart_h: int = 4) -> HySmiTop:
+        return HySmiTop(self.DEVICES, 1000, chart_h)
+
+    def test_tall_window_keeps_default_chart(self):
+        per_row, chart_h, nrows = self.make()._layout(40, 120, 8)
+        self.assertEqual((per_row, chart_h, nrows), (4, 4, 2))
+        self.assertEqual((2 + chart_h + 1) * nrows, 14)
+
+    def test_short_window_compresses_y(self):
+        per_row, chart_h, nrows = self.make()._layout(20, 80, 8)
+        self.assertEqual((per_row, chart_h, nrows), (2, 1, 4))
+        self.assertEqual((2 + chart_h + 1) * nrows, 16)  # fits in 17 avail rows
+
+    def test_very_short_window_compresses_x_then_y(self):
+        per_row, chart_h, nrows = self.make()._layout(12, 80, 8)
+        self.assertEqual((per_row, chart_h, nrows), (4, 1, 2))
+        self.assertEqual((2 + chart_h + 1) * nrows, 8)  # fits in 9 avail rows
+
+    def test_all_in_one_row_when_wide(self):
+        per_row, chart_h, nrows = self.make()._layout(10, 200, 8)
+        self.assertEqual((per_row, chart_h, nrows), (8, 4, 1))
+        self.assertEqual((2 + chart_h + 1) * nrows, 7)  # fits in 7 avail rows
+
+    def test_tiny_window_reports_overflow(self):
+        per_row, chart_h, nrows = self.make()._layout(6, 80, 8)
+        self.assertGreater((2 + chart_h + 1) * nrows, 6 - 3)  # cannot fit
+
+    def test_requested_chart_height_is_cap(self):
+        app = self.make(chart_h=2)
+        per_row, chart_h, nrows = app._layout(40, 120, 8)
+        self.assertEqual(chart_h, 2)
 
 
 if __name__ == "__main__":

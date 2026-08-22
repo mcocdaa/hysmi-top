@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hysmi-top"
+version = "0.1.0"
+description = "Terminal monitor for Hygon DCU (hy-smi) with nvtop-style scrolling curves"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = []
+
+[project.scripts]
+hysmi-top = "hysmi_top.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["hysmi_top*"]

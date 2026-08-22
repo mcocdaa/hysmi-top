@@ -155,13 +155,13 @@ class UiTest(unittest.TestCase):
 class LayoutTest(unittest.TestCase):
     DEVICES = list(range(8))
 
-    def make(self, chart_h: int = 4) -> HySmiTop:
+    def make(self, chart_h: int | None = None) -> HySmiTop:
         return HySmiTop(self.DEVICES, 1000, chart_h)
 
     def test_tall_window_grows_chart_to_fill(self):
         per_row, chart_h, nrows = self.make()._layout(40, 120, 8)
-        self.assertEqual((per_row, chart_h, nrows), (4, 8, 2))
-        self.assertEqual((2 + chart_h + 1) * nrows, 22)  # fits in 37 avail rows
+        self.assertEqual((per_row, chart_h, nrows), (4, 15, 2))
+        self.assertEqual((2 + chart_h + 1) * nrows, 36)  # fills 37 avail rows
 
     def test_short_window_compresses_y(self):
         per_row, chart_h, nrows = self.make()._layout(20, 80, 8)
@@ -182,10 +182,10 @@ class LayoutTest(unittest.TestCase):
         per_row, chart_h, nrows = self.make()._layout(6, 80, 8)
         self.assertGreater((2 + chart_h + 1) * nrows, 6 - 3)  # cannot fit
 
-    def test_requested_chart_height_is_minimum(self):
+    def test_requested_chart_height_is_cap(self):
         app = self.make(chart_h=2)
         per_row, chart_h, nrows = app._layout(40, 120, 8)
-        self.assertGreaterEqual(chart_h, 2)  # grows to fill screen, never below request
+        self.assertEqual((per_row, chart_h, nrows), (4, 2, 2))  # capped, does not fill
 
 
 if __name__ == "__main__":

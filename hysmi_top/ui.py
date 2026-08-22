@@ -159,7 +159,7 @@ def _init_colors() -> dict[str, int]:
 
 
 class HySmiTop:
-    def __init__(self, device_ids: list[int], refresh_ms: int, chart_h: int):
+    def __init__(self, device_ids: list[int], refresh_ms: int, chart_h: int | None = None):
         self.device_ids = device_ids
         self.refresh_ms = refresh_ms
         self.chart_h = chart_h
@@ -199,10 +199,10 @@ class HySmiTop:
     def _layout(self, maxy: int, maxx: int, ndev: int) -> tuple[int, int, int]:
         """Fit ``ndev`` device blocks into the terminal.
 
-        Returns ``(per_row, chart_h, nrows)``. Curve height fills the
-        available vertical space (up to 8 rows); if blocks overflow, Y is
-        compressed first down to 1 row, then X is compressed by adding
-        columns (up to one per device).
+        Returns ``(per_row, chart_h, nrows)``. Curve height fills all the
+        available vertical space below the header (capped by ``chart_h`` if
+        one was requested); if blocks overflow, Y is compressed first down to
+        1 row, then X is compressed by adding columns (up to one per device).
         """
         avail_h = maxy - 3
         per_row = min(ndev, max(1, maxx // MIN_BLOCK_W))
@@ -210,7 +210,8 @@ class HySmiTop:
             nrows = (ndev + per_row - 1) // per_row
             fit = (avail_h // nrows) - 3
             if fit >= 1:
-                return per_row, min(max(self.chart_h, 8), fit), nrows
+                chart_h = fit if self.chart_h is None else min(fit, self.chart_h)
+                return per_row, chart_h, nrows
             if per_row < ndev:
                 per_row = min(ndev, per_row * 2)
                 continue

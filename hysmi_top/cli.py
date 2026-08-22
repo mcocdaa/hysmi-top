@@ -75,8 +75,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="comma/range list of HCU ids, e.g. 0,2-4 (default: all)")
     parser.add_argument("-r", "--refresh", type=int, default=DEFAULT_REFRESH_MS,
                         help=f"refresh interval in ms (default {DEFAULT_REFRESH_MS})")
-    parser.add_argument("-c", "--chart-height", type=int, default=DEFAULT_CHART_H,
-                        help=f"height in rows of each curve chart (default {DEFAULT_CHART_H})")
+    parser.add_argument("-c", "--chart-height", type=int, default=None,
+                        help="cap on curve chart height in rows (default: fill available space)")
     parser.add_argument("--once", action="store_true",
                         help="print a one-shot snapshot and exit (no TUI)")
     parser.add_argument("--json", action="store_true", help="with --once, emit JSON")

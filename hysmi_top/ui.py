@@ -289,8 +289,6 @@ class HySmiTop:
         put(top, x, "HCU%", "header", right); x += 4
         put(top, x, " \u2500", "vram", right); x += 2
         put(top, x, "VRAM%", "header", right); x += 5
-        put(top, x, " \u2500", "mix", right); x += 2
-        put(top, x, "mix", "header", right); x += 3
         put(top, x, f" u={s.util_percent:4.1f}%", "status", right)
 
         chart = render_overlay([self.util[s.hcu_id], self.vram[s.hcu_id]], chart_w, chart_h, utf8)

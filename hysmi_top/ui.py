@@ -123,13 +123,11 @@ def _pod_layout(maxx: int, per_row: int) -> tuple[int, int]:
 
 def _fmt_mem(bytes_: int) -> str:
     if bytes_ <= 0:
-        return "0"
+        return "0.0G"
     val = bytes_ / (1024**3)
     if val >= 100:
         return f"{val:.0f}G"
-    if val >= 10:
-        return f"{val:.1f}G"
-    return f"{val:.2f}G"
+    return f"{val:.1f}G"
 
 
 def _init_colors() -> dict[str, int]:

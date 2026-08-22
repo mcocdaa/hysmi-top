@@ -142,7 +142,8 @@ class UiTest(unittest.TestCase):
 
     def test_fmt_mem(self):
         self.assertEqual(_fmt_mem(64 * 1024**3), "64.0G")
-        self.assertEqual(_fmt_mem(2 * 1024**3), "2.00G")
+        self.assertEqual(_fmt_mem(2 * 1024**3), "2.0G")
+        self.assertEqual(_fmt_mem(0), "0.0G")
 
 
 class LayoutTest(unittest.TestCase):

@@ -91,41 +91,35 @@ def render_overlay(
         cells: list[tuple[str, int | None]] = []
         for c in range(width):
             owners: set[int] = set()
+            exact_overlap = False
             top_dot = 0
-            d_rows: list[int] = []
+            mask = 0
             for dr in range(4):
                 for dc in range(2):
                     mask_val = owner[g * 4 + dr][c * 2 + dc]
                     if mask_val:
-                        for ci in range(len(series_list)):
-                            if mask_val & (1 << ci):
-                                owners.add(ci + 1)
-                        d_rows.append(dr)
+                        mask |= _DOT_BITS[dr][dc]
                         if top_dot == 0:
                             top_dot = _DOT_BITS[dr][dc]
-            if owners:
-                if len(owners) > 1:
-                    # merged curves: collapse to a single dot ONLY when curves are very close
-                    # in tall charts (e.g. 60% vs 65%), keeping lines thin as in nvtop.
-                    # When curves are distinct or chart is compressed, keep all dots so neither curve is lost.
-                    if height >= 3 and (max(d_rows) - min(d_rows) <= 1):
-                        cells.append((chr(_BRAILLE + top_dot) if utf8 else "*", MIX_OWNER))
-                    else:
-                        mask = 0
-                        for dr in range(4):
-                            for dc in range(2):
-                                if owner[g * 4 + dr][c * 2 + dc]:
-                                    mask |= _DOT_BITS[dr][dc]
-                        cells.append((chr(_BRAILLE + mask) if utf8 else "*", MIX_OWNER))
-                else:
-                    mask = 0
-                    for dr in range(4):
-                        for dc in range(2):
-                            if owner[g * 4 + dr][c * 2 + dc]:
-                                mask |= _DOT_BITS[dr][dc]
-                    cells.append((chr(_BRAILLE + mask) if utf8 else "*", owners.pop() - 1))
-            else:
+                        # Check if multiple curves share this EXACT pixel
+                        if mask_val & (mask_val - 1) != 0:
+                            exact_overlap = True
+                        for ci in range(len(series_list)):
+                            if mask_val & (1 << ci):
+                                owners.add(ci)
+            if not owners:
                 cells.append((" ", None))
+            elif exact_overlap:
+                # 完全重合（同坐标像素重叠）：必须完全重合才是蓝色 MIX_OWNER！
+                # 若两条曲线在该点完全重合，合并为单点高亮蓝色显示
+                cells.append((chr(_BRAILLE + top_dot) if utf8 else "*", MIX_OWNER))
+            elif len(owners) == 1:
+                # 只有单一曲线
+                cells.append((chr(_BRAILLE + mask) if utf8 else "*", owners.pop()))
+            else:
+                # 邻近但不完全重合（如 60% vs 65%，或紧凑高度下不同数值共存一个字符单元）：
+                # 绝不变蓝色！保留各自点阵，显示主曲线颜色（0 = util 绿色）
+                cells.append((chr(_BRAILLE + mask) if utf8 else "*", 0))
         rows.append(cells)
     return rows
 

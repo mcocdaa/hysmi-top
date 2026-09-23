@@ -138,8 +138,8 @@ class UiTest(unittest.TestCase):
         self.assertIn(1, owners)  # high curve (vram=100) present
 
     def test_overlay_merged_mix_single_dot(self):
-        # two close series landing in the same braille cell band -> blue mix
-        rows = render_overlay([deque([60.0] * 8), deque([65.0] * 8)], width=4, height=4, utf8=True)
+        # exactly identical series (complete overlap) -> single dot and blue mix
+        rows = render_overlay([deque([60.0] * 8), deque([60.0] * 8)], width=4, height=4, utf8=True)
         owners = {rows[r][c][1] for r in range(4) for c in range(4)}
         self.assertIn(MIX_OWNER, owners)
         self.assertNotIn(0, owners)
@@ -151,6 +151,13 @@ class UiTest(unittest.TestCase):
                 if owner == MIX_OWNER:
                     self.assertEqual(bin(ord(ch) - 0x2800).count("1"), 1)
 
+    def test_overlay_adjacent_curves_not_blue(self):
+        # adjacent but non-identical curves (60.0% vs 65.0%) must NOT be blue
+        rows = render_overlay([deque([60.0] * 8), deque([65.0] * 8)], width=4, height=4, utf8=True)
+        owners = {rows[r][c][1] for r in range(4) for c in range(4)}
+        self.assertNotIn(MIX_OWNER, owners)
+        self.assertIn(0, owners)
+
     def test_overlay_exact_identical_curves_trigger_mix(self):
         # exactly identical series (e.g. both 50.0% or both 0.0%) must trigger MIX_OWNER (blue)
         rows = render_overlay([deque([50.0] * 8), deque([50.0] * 8)], width=4, height=4, utf8=True)
@@ -161,21 +168,21 @@ class UiTest(unittest.TestCase):
 
     def test_overlay_compressed_chart_preserves_both_curves(self):
         # In a 1-row chart, 0% util and 20% vram share the same braille cell.
-        # Both dots must be preserved rather than dropping the 0% curve.
+        # Both dots must be preserved, and non-overlapping curves must NOT be blue.
         rows = render_overlay([deque([0.0] * 8), deque([20.0] * 8)], width=4, height=1, utf8=True)
         self.assertEqual(len(rows), 1)
         for c in range(4):
             ch, owner = rows[0][c]
-            self.assertEqual(owner, MIX_OWNER)
+            self.assertEqual(owner, 0)
             dots = bin(ord(ch) - 0x2800).count("1")
             self.assertGreaterEqual(dots, 2, f"Both curves should be visible in cell: {ch}")
 
     def test_overlay_linear_crossing(self):
-        # Util rising 10 -> 90 and VRAM falling 90 -> 10 intersect near the center
-        u = deque([10.0 + 80.0 * (i / 19) for i in range(20)], maxlen=512)
-        v = deque([90.0 - 80.0 * (i / 19) for i in range(20)], maxlen=512)
-        chart = render_overlay([u, v], width=20, height=4, utf8=True)
-        owners = {chart[r][c][1] for r in range(4) for c in range(20)}
+        # Crossing series with exact 50.0% overlap at center index 10
+        u = deque([10.0 + 80.0 * (i / 20) for i in range(21)], maxlen=512)
+        v = deque([90.0 - 80.0 * (i / 20) for i in range(21)], maxlen=512)
+        chart = render_overlay([u, v], width=21, height=4, utf8=True)
+        owners = {chart[r][c][1] for r in range(4) for c in range(21)}
         self.assertIn(0, owners)  # util present
         self.assertIn(1, owners)  # vram present
         self.assertIn(MIX_OWNER, owners)  # intersection detected as mix

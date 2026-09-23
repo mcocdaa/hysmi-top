@@ -53,7 +53,9 @@ def _line_owner(owner: list[list[int]], x0: int, y0: int, x1: int, y1: int, val:
             y0 += sy
 
 
-def render_overlay(series_list: list[deque[float]], width: int, height: int, utf8: bool) -> list[list[tuple[str, int | None]]]:
+def render_overlay(
+    series_list: list[deque[float]], width: int, height: int, utf8: bool
+) -> list[list[tuple[str, int | None]]]:
     """Overlay several 0..100 rolling series as lines on one grid.
 
     Returns ``height`` rows; each row is a list of ``(char, owner)`` where
@@ -73,7 +75,7 @@ def render_overlay(series_list: list[deque[float]], width: int, height: int, utf
             if idx >= n:
                 break
             value = max(0.0, min(100.0, series[idx]))
-            y = int(round((100.0 - value) / 100.0 * (pix_h - 1)))
+            y = round((100.0 - value) / 100.0 * (pix_h - 1))
             pts.append((col * 2, y))
         if not pts:
             continue
@@ -143,8 +145,15 @@ def _init_colors() -> dict[str, int]:
     curses.start_color()
     curses.use_default_colors()
     pairs = {
-        "title": 1, "header": 2, "util": 3, "vram": 4, "status": 5,
-        "proc": 6, "dim": 7, "err": 8, "mix": 9,
+        "title": 1,
+        "header": 2,
+        "util": 3,
+        "vram": 4,
+        "status": 5,
+        "proc": 6,
+        "dim": 7,
+        "err": 8,
+        "mix": 9,
     }
     curses.init_pair(pairs["title"], curses.COLOR_CYAN, -1)
     curses.init_pair(pairs["header"], curses.COLOR_WHITE, -1)
@@ -240,14 +249,16 @@ class HySmiTop:
                 pass
 
         row = 0
-        put(row, 0, "hysmi-top  -  Hygon DCU monitor", "title"); row += 1
-        put(row, 0, "q:quit  +/-:speed", "dim"); row += 1
+        put(row, 0, "hysmi-top  -  Hygon DCU monitor", "title")
+        row += 1
+        put(row, 0, "q:quit  +/-:speed", "dim")
+        row += 1
 
         devs = [s for s in self.last_stats.values()]
         if not devs:
             put(row, 0, "no HCU devices found", "err")
             return
-        per_row, nrows, base, extra = self._layout(maxy, maxx, len(devs))
+        per_row, _nrows, base, extra = self._layout(maxy, maxx, len(devs))
         if base < 4:
             put(row, 0, f"terminal too small for {len(devs)} cards; enlarge window", "err")
             return
@@ -260,11 +271,11 @@ class HySmiTop:
             chart_h = block_h - 3
             if self.chart_h is not None:
                 chart_h = min(chart_h, self.chart_h)
-            self._draw_block(scr, s, top, (i % per_row) * stride,
-                             width, chart_h, utf8, put)
+            self._draw_block(scr, s, top, (i % per_row) * stride, width, chart_h, utf8, put)
 
-    def _draw_block(self, scr, s: HcuStats, top: int, left: int, width: int,
-                    chart_h: int, utf8: bool, put) -> None:
+    def _draw_block(
+        self, scr, s: HcuStats, top: int, left: int, width: int, chart_h: int, utf8: bool, put
+    ) -> None:
         right = left + width
         chart_w = max(4, width - 2)
         hdr = f"HCU {s.hcu_id}"
@@ -274,10 +285,14 @@ class HySmiTop:
             return
         put(top, left, hdr, "header", right)
         x = left + len(hdr)
-        put(top, x, "  \u2500", "util", right); x += 3
-        put(top, x, "HCU%", "header", right); x += 4
-        put(top, x, " \u2500", "vram", right); x += 2
-        put(top, x, "VRAM%", "header", right); x += 5
+        put(top, x, "  \u2500", "util", right)
+        x += 3
+        put(top, x, "HCU%", "header", right)
+        x += 4
+        put(top, x, " \u2500", "vram", right)
+        x += 2
+        put(top, x, "VRAM%", "header", right)
+        x += 5
         put(top, x, f" u={s.util_percent:4.1f}%", "status", right)
 
         chart = render_overlay([self.util[s.hcu_id], self.vram[s.hcu_id]], chart_w, chart_h, utf8)

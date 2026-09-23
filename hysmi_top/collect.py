@@ -11,7 +11,7 @@ import os
 import re
 import shutil
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 DRM_DIR = Path("/sys/class/drm")
@@ -121,7 +121,7 @@ def discover_devices() -> list[Path]:
 def _card_dir_for(hcu_id: int) -> Path | None:
     """Map an HCU id back to its sysfs card directory (card1 -> HCU 0)."""
     cards = discover_devices()
-    if hcu_id >= len(cards):
+    if hcu_id < 0 or hcu_id >= len(cards):
         return None
     return cards[hcu_id] / "device"
 

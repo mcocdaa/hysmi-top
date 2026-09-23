@@ -10,7 +10,7 @@ import sys
 
 from . import __version__
 from .collect import collect_all, discover_devices, read_processes
-from .ui import DEFAULT_CHART_H, DEFAULT_REFRESH_MS, HySmiTop
+from .ui import DEFAULT_REFRESH_MS, HySmiTop
 
 
 def _parse_devices(text: str) -> list[int]:
@@ -24,7 +24,13 @@ def _parse_devices(text: str) -> list[int]:
             ids.extend(range(int(a), int(b) + 1))
         else:
             ids.append(int(part))
-    return ids
+    seen: set[int] = set()
+    result: list[int] = []
+    for d in ids:
+        if d >= 0 and d not in seen:
+            seen.add(d)
+            result.append(d)
+    return result
 
 
 def _snapshot(device_ids: list[int], as_json: bool) -> int:
@@ -52,6 +58,9 @@ def _snapshot(device_ids: list[int], as_json: bool) -> int:
         }
         print(json.dumps(payload, indent=2))
         return 0
+    if not stats:
+        print("No Hygon DCU devices found.", file=sys.stderr)
+        return 0
     for s in stats:
         flag = "" if s.ok else f"  [ERROR: {s.error}]"
         print(
@@ -71,14 +80,29 @@ def main(argv: list[str] | None = None) -> int:
         description="Terminal monitor for Hygon DCU cards (hy-smi data) with scrolling curves.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    parser.add_argument("-d", "--devices", default=None,
-                        help="comma/range list of HCU ids, e.g. 0,2-4 (default: all)")
-    parser.add_argument("-r", "--refresh", type=int, default=DEFAULT_REFRESH_MS,
-                        help=f"refresh interval in ms (default {DEFAULT_REFRESH_MS})")
-    parser.add_argument("-c", "--chart-height", type=int, default=None,
-                        help="cap on curve chart height in rows (default: fill available space)")
-    parser.add_argument("--once", action="store_true",
-                        help="print a one-shot snapshot and exit (no TUI)")
+    parser.add_argument(
+        "-d",
+        "--devices",
+        default=None,
+        help="comma/range list of HCU ids, e.g. 0,2-4 (default: all)",
+    )
+    parser.add_argument(
+        "-r",
+        "--refresh",
+        type=int,
+        default=DEFAULT_REFRESH_MS,
+        help=f"refresh interval in ms (default {DEFAULT_REFRESH_MS})",
+    )
+    parser.add_argument(
+        "-c",
+        "--chart-height",
+        type=int,
+        default=None,
+        help="cap on curve chart height in rows (default: fill available space)",
+    )
+    parser.add_argument(
+        "--once", action="store_true", help="print a one-shot snapshot and exit (no TUI)"
+    )
     parser.add_argument("--json", action="store_true", help="with --once, emit JSON")
     args = parser.parse_args(argv)
 

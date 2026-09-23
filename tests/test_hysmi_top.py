@@ -1,10 +1,13 @@
+from __future__ import annotations
+
+import tempfile
 import unittest
 from collections import deque
 from pathlib import Path
 from unittest import mock
 
 from hysmi_top import collect
-from hysmi_top.ui import HySmiTop, MIX_OWNER, _fmt_mem, _pod_layout, render_overlay
+from hysmi_top.ui import MIX_OWNER, HySmiTop, _fmt_mem, _pod_layout, render_overlay
 
 
 def make_sysfs(tmp: Path, ncards: int = 2) -> None:
@@ -14,7 +17,9 @@ def make_sysfs(tmp: Path, ncards: int = 2) -> None:
         (dev / "driver").mkdir(parents=True, exist_ok=True)
         # make driver a symlink named hycu, as in real sysfs
         (dev / "driver").rmdir()
-        (dev / "driver").symlink_to("../../../../../bus/pci/drivers/hycu", target_is_directory=False)
+        (dev / "driver").symlink_to(
+            "../../../../../bus/pci/drivers/hycu", target_is_directory=False
+        )
         (dev / "gpu_busy_percent").write_text("12")
         (dev / "mem_info_vram_used").write_text(str(2 * 1024**3))
         (dev / "mem_info_vram_total").write_text(str(64 * 1024**3))
@@ -28,15 +33,15 @@ def make_sysfs(tmp: Path, ncards: int = 2) -> None:
 
 class CollectTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path("/tmp/hysmi_top_test_sysfs")
-        import shutil
-        shutil.rmtree(self.tmp, ignore_errors=True)
+        self._temp_dir = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._temp_dir.name)
         make_sysfs(self.tmp)
         self.patcher = mock.patch.object(collect, "DRM_DIR", self.tmp / "sys" / "class" / "drm")
         self.patcher.start()
 
     def tearDown(self):
         self.patcher.stop()
+        self._temp_dir.cleanup()
 
     def test_discover_devices(self):
         cards = collect.discover_devices()
@@ -60,12 +65,21 @@ class CollectTest(unittest.TestCase):
         self.assertFalse(s.ok)
         self.assertIn("no sysfs device", s.error)
 
+    def test_read_device_negative_index(self):
+        s = collect.read_device(-1)
+        self.assertFalse(s.ok)
+        self.assertIn("no sysfs device", s.error)
+
     def test_collect_all(self):
         stats = collect.collect_all([0, 1])
         self.assertEqual([s.hcu_id for s in stats], [0, 1])
 
     def test_read_processes_empty(self):
-        with mock.patch.object(collect.subprocess, "run", return_value=mock.Mock(stdout="No KFD PIDs currently running!")):
+        with mock.patch.object(
+            collect.subprocess,
+            "run",
+            return_value=mock.Mock(stdout="No KFD PIDs currently running!"),
+        ):
             self.assertEqual(collect.read_processes(), [])
 
     def test_read_processes_parse(self):
@@ -81,9 +95,11 @@ class CollectTest(unittest.TestCase):
             "\tHCU Index: ['5']\n"
             "\tVRAM USED(MiB): 1024\n"
         )
-        with mock.patch.object(collect.subprocess, "run", return_value=mock.Mock(stdout=out)):
-            with mock.patch("hysmi_top.collect._proc_name", return_value="python"):
-                procs = collect.read_processes()
+        with (
+            mock.patch.object(collect.subprocess, "run", return_value=mock.Mock(stdout=out)),
+            mock.patch("hysmi_top.collect._proc_name", return_value="python"),
+        ):
+            procs = collect.read_processes()
         self.assertEqual(len(procs), 2)
         self.assertEqual(procs[0].pid, 12345)
         self.assertEqual(procs[0].device, 2)
@@ -116,18 +132,14 @@ class UiTest(unittest.TestCase):
         self.assertEqual(rows[0][0][0], "*")
 
     def test_overlay_two_curves(self):
-        rows = render_overlay(
-            [deque([0.0] * 8), deque([100.0] * 8)], width=4, height=4, utf8=True
-        )
+        rows = render_overlay([deque([0.0] * 8), deque([100.0] * 8)], width=4, height=4, utf8=True)
         owners = {rows[r][c][1] for r in range(4) for c in range(4)}
         self.assertIn(0, owners)  # low curve (vram=0) present
         self.assertIn(1, owners)  # high curve (vram=100) present
 
     def test_overlay_merged_mix_single_dot(self):
         # two close series landing in the same braille cell band -> blue mix
-        rows = render_overlay(
-            [deque([60.0] * 8), deque([65.0] * 8)], width=4, height=4, utf8=True
-        )
+        rows = render_overlay([deque([60.0] * 8), deque([65.0] * 8)], width=4, height=4, utf8=True)
         owners = {rows[r][c][1] for r in range(4) for c in range(4)}
         self.assertIn(MIX_OWNER, owners)
         self.assertNotIn(0, owners)
@@ -153,13 +165,13 @@ class UiTest(unittest.TestCase):
 
 
 class LayoutTest(unittest.TestCase):
-    DEVICES = list(range(8))
+    DEVICES: tuple[int, ...] = tuple(range(8))
 
     def make(self, chart_h: int | None = None) -> HySmiTop:
-        return HySmiTop(self.DEVICES, 1000, chart_h)
+        return HySmiTop(list(self.DEVICES), 1000, chart_h)
 
     def used_rows(self, maxy: int, maxx: int, ndev: int) -> int:
-        per_row, nrows, base, extra = self.make()._layout(maxy, maxx, ndev)
+        _per_row, nrows, base, extra = self.make()._layout(maxy, maxx, ndev)
         return 2 + nrows * base + extra if base >= 4 else -1
 
     def test_layout_fills_every_row(self):
@@ -180,7 +192,7 @@ class LayoutTest(unittest.TestCase):
         self.assertEqual(self.make()._layout(12, 80, 8), (4, 2, 5, 0))
 
     def test_tiny_window_reports_overflow(self):
-        per_row, nrows, base, extra = self.make()._layout(5, 80, 8)
+        _per_row, _nrows, base, _extra = self.make()._layout(5, 80, 8)
         self.assertLess(base, 4)  # cannot fit even at minimum block height
 
 

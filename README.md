@@ -31,28 +31,37 @@ root、不轮询起子进程。
 
 ## 安装与运行
 
-### 方式一：使用 `uv`（推荐，速度极快）
+### 方式一：使用 `uv` 安装（推荐，无 pip 环境首选）
 
-如果你只有 `uv` 没有 `pip`：
+#### 1. 在线安装（联网环境推荐）
 
 ```bash
-# 1. 免安装一次性运行（uvx，开箱即用）
+uv tool install git+https://github.com/mcocdaa/hysmi-top.git
+```
+> 安装后会自动将可执行文件加入 PATH，在任意路径直接输入 `hysmi-top` 即可启动。
+
+#### 2. 离线 / 内网服务器安装（无外网环境）
+
+海光 DCU 计算节点若无法访问外网：
+1. 在有网电脑上访问 [GitHub Releases v0.2.0](https://github.com/mcocdaa/hysmi-top/releases/tag/v0.2.0) 下载 Wheel 文件：
+   - 文件名：`hysmi_top-0.2.0-py3-none-any.whl`
+2. 将文件拷贝至目标服务器，执行安装：
+   ```bash
+   # 使用 uv tool 全局独立安装：
+   uv tool install ./hysmi_top-0.2.0-py3-none-any.whl
+
+   # 或者使用 uv pip 安装到当前环境/系统 Python：
+   uv pip install --system ./hysmi_top-0.2.0-py3-none-any.whl
+   ```
+
+#### 3. 免安装一次性运行（uvx）
+
+```bash
+# 直接在线拉取并启动：
 uvx --from git+https://github.com/mcocdaa/hysmi-top.git hysmi-top
 
-# 运行模拟 Demo 模式（无需 DCU 硬件）：
+# 启动模拟演示 Demo（无物理 DCU 硬件也可查看交互）：
 uvx --from git+https://github.com/mcocdaa/hysmi-top.git hysmi-top --demo
-
-# 2. 全局独立安装为 CLI 命令（推荐日常使用，自动隔离环境）
-uv tool install git+https://github.com/mcocdaa/hysmi-top.git
-
-# 安装后即可在任意终端直接执行：
-hysmi-top
-hysmi-top --demo
-
-# 3. 如果是内网/离线服务器（从 Releases 下载 .whl 文件后）
-uv tool install ./hysmi_top-0.2.0-py3-none-any.whl
-# 或者通过 uv pip：
-uv pip install --system ./hysmi_top-0.2.0-py3-none-any.whl
 ```
 
 ### 方式二：使用 `pip`

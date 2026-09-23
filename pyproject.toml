@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hysmi-top"
-version = "0.1.0"
+version = "0.2.0"
 description = "Terminal monitor for Hygon DCU (hy-smi) with nvtop-style scrolling curves"
 readme = "README.md"
 requires-python = ">=3.9"

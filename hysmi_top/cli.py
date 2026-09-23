@@ -33,9 +33,14 @@ def _parse_devices(text: str) -> list[int]:
     return result
 
 
-def _snapshot(device_ids: list[int], as_json: bool) -> int:
-    stats = collect_all(device_ids)
-    procs = read_processes()
+def _snapshot(device_ids: list[int], as_json: bool, demo: bool = False) -> int:
+    if demo:
+        top = HySmiTop(device_ids, 1000, demo=True)
+        stats = [top.last_stats[d] for d in device_ids]
+        procs = []
+    else:
+        stats = collect_all(device_ids)
+        procs = read_processes()
     if as_json:
         payload = {
             "devices": [
@@ -101,24 +106,31 @@ def main(argv: list[str] | None = None) -> int:
         help="cap on curve chart height in rows (default: fill available space)",
     )
     parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="run in demo mode with simulated workload curves (no DCU hardware needed)",
+    )
+    parser.add_argument(
         "--once", action="store_true", help="print a one-shot snapshot and exit (no TUI)"
     )
     parser.add_argument("--json", action="store_true", help="with --once, emit JSON")
     args = parser.parse_args(argv)
 
     device_ids = _parse_devices(args.devices) if args.devices else None
-    if device_ids is None:
+    if args.demo and device_ids is None:
+        device_ids = list(range(8))
+    elif device_ids is None:
         device_ids = list(range(len(discover_devices())))
 
     if args.once:
-        return _snapshot(device_ids, args.json)
+        return _snapshot(device_ids, args.json, demo=args.demo)
 
     if not sys.stdout.isatty():
         print("hysmi-top needs a TTY; use --once for a text snapshot", file=sys.stderr)
         return 1
 
     locale.setlocale(locale.LC_ALL, "")
-    app = HySmiTop(device_ids, args.refresh, args.chart_height)
+    app = HySmiTop(device_ids, args.refresh, args.chart_height, demo=args.demo)
     return curses.wrapper(app.run)
 
 

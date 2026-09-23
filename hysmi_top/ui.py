@@ -182,16 +182,80 @@ def _init_colors() -> dict[str, int]:
 
 
 class HySmiTop:
-    def __init__(self, device_ids: list[int], refresh_ms: int, chart_h: int | None = None):
+    def __init__(
+        self,
+        device_ids: list[int],
+        refresh_ms: int,
+        chart_h: int | None = None,
+        demo: bool = False,
+    ):
         self.device_ids = device_ids
         self.refresh_ms = refresh_ms
         self.chart_h = chart_h
+        self.demo = demo
+        self._tick = 0
         self.util: dict[int, deque[float]] = {d: deque(maxlen=512) for d in device_ids}
         self.vram: dict[int, deque[float]] = {d: deque(maxlen=512) for d in device_ids}
         self.last_stats: dict[int, HcuStats] = {}
+        if self.demo:
+            self._init_demo()
+
+    def _init_demo(self) -> None:
+        for _ in range(35):
+            self.poll()
+
+    def _poll_demo(self) -> list[HcuStats]:
+        import math
+        import random
+
+        stats = []
+        self._tick += 1
+        t = self._tick
+        for d in self.device_ids:
+            if d == 0:
+                u = max(0.0, min(100.0, 50.0 + 40.0 * math.sin(t * 0.15)))
+                v = max(0.0, min(100.0, 50.0 + 35.0 * math.cos(t * 0.15)))
+            elif d == 1:
+                phase = (t * 5) % 200
+                u = float(phase if phase <= 100 else 200 - phase)
+                v = 100.0 - u
+            elif d == 2:
+                u = 95.0 if (t % 8 in (0, 1)) else 0.0
+                v = 45.0
+            elif d == 3:
+                steps = [15.0, 45.0, 75.0, 90.0]
+                u = steps[(t // 8) % len(steps)]
+                v = 60.0
+            elif d == 4:
+                w = max(0.0, min(100.0, 50.0 + 35.0 * math.sin(t * 0.15)))
+                u, v = w, w
+            elif d == 5:
+                prev_u = self.util[d][-1] if self.util[d] else 60.0
+                u = max(10.0, min(95.0, prev_u + random.uniform(-8.0, 8.0)))
+                v = 50.0 + random.uniform(-4.0, 4.0)
+            elif d == 6:
+                u = 0.0
+                v = 25.0
+            else:
+                u = 0.0
+                v = 0.0
+            stats.append(
+                HcuStats(
+                    hcu_id=d,
+                    util_percent=round(u, 1),
+                    vram_used=int(round(v, 1) * 64 * 1024**3 / 100),
+                    vram_total=64 * 1024**3,
+                    temp_milli=45000 + int(u * 150),
+                    power_uw=120_000_000 + int(u * 1_000_000),
+                )
+            )
+        return stats
 
     def poll(self) -> None:
-        stats = collect_all(self.device_ids)
+        if self.demo:
+            stats = self._poll_demo()
+        else:
+            stats = collect_all(self.device_ids)
         for s in stats:
             self.last_stats[s.hcu_id] = s
             self.util[s.hcu_id].append(s.util_percent)

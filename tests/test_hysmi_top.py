@@ -170,6 +170,26 @@ class UiTest(unittest.TestCase):
             dots = bin(ord(ch) - 0x2800).count("1")
             self.assertGreaterEqual(dots, 2, f"Both curves should be visible in cell: {ch}")
 
+    def test_overlay_linear_crossing(self):
+        # Util rising 10 -> 90 and VRAM falling 90 -> 10 intersect near the center
+        u = deque([10.0 + 80.0 * (i / 19) for i in range(20)], maxlen=512)
+        v = deque([90.0 - 80.0 * (i / 19) for i in range(20)], maxlen=512)
+        chart = render_overlay([u, v], width=20, height=4, utf8=True)
+        owners = {chart[r][c][1] for r in range(4) for c in range(20)}
+        self.assertIn(0, owners)  # util present
+        self.assertIn(1, owners)  # vram present
+        self.assertIn(MIX_OWNER, owners)  # intersection detected as mix
+
+    def test_demo_mode_poll(self):
+        top = HySmiTop(list(range(8)), 1000, demo=True)
+        self.assertEqual(len(top.last_stats), 8)
+        self.assertEqual(len(top.util[0]), 35)
+        # Ensure cards have varying workloads
+        self.assertEqual(top.last_stats[6].util_percent, 0.0)
+        self.assertEqual(top.last_stats[6].vram_percent, 25.0)
+        self.assertEqual(top.last_stats[7].util_percent, 0.0)
+        self.assertEqual(top.last_stats[7].vram_percent, 0.0)
+
     def test_pod_layout(self):
         self.assertEqual(_pod_layout(80, 1), (0, 80))
         self.assertEqual(_pod_layout(80, 2), (8, 36))

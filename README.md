@@ -35,6 +35,9 @@ root、不轮询起子进程。
 # 直接运行（TUI）
 python3 -m hysmi_top
 
+# 模拟演示模式（无需物理硬件，内置正弦波、交叉、脉冲、阶梯、动态重合等多种曲线测试）
+python3 -m hysmi_top --demo
+
 # 指定卡、刷新间隔、图表高度
 python3 -m hysmi_top -d 0-3 -r 500 -c 4
 
@@ -45,11 +48,16 @@ python3 -m hysmi_top --once --json
 
 键盘：`q` 退出，`+`/`-` 调整刷新速度。
 
-## 安装（可选）
+## 可视化曲线检查工具
+
+针对不同终端分辨率与多种曲线形态，提供了无硬件依赖的可视化检查脚本：
 
 ```bash
-pip install .
-hysmi-top
+# 检查终端排版效果（支持自定义宽高，如 16 行 90 列）
+python3 tests/visual_test.py 16 90
+
+# 查看各种经典曲线独立模式（交叉、动态完全重合、阶梯、紧凑高度对比等）
+python3 tests/visual_test.py --patterns
 ```
 
 ## 测试

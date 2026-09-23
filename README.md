@@ -29,21 +29,69 @@ root、不轮询起子进程。
 - Python >= 3.9
 - 终端建议 UTF-8（非 UTF-8 自动回退为 `*` 折线）
 
-## 使用
+## 安装与运行
+
+### 方式一：使用 `uv`（推荐，速度极快）
+
+如果你只有 `uv` 没有 `pip`：
 
 ```bash
-# 直接运行（TUI）
+# 1. 免安装一次性运行（uvx，开箱即用）
+uvx --from git+https://github.com/mcocdaa/hysmi-top.git hysmi-top
+
+# 运行模拟 Demo 模式（无需 DCU 硬件）：
+uvx --from git+https://github.com/mcocdaa/hysmi-top.git hysmi-top --demo
+
+# 2. 全局独立安装为 CLI 命令（推荐日常使用，自动隔离环境）
+uv tool install git+https://github.com/mcocdaa/hysmi-top.git
+
+# 安装后即可在任意终端直接执行：
+hysmi-top
+hysmi-top --demo
+
+# 3. 如果是内网/离线服务器（从 Releases 下载 .whl 文件后）
+uv tool install ./hysmi_top-0.2.0-py3-none-any.whl
+# 或者通过 uv pip：
+uv pip install --system ./hysmi_top-0.2.0-py3-none-any.whl
+```
+
+### 方式二：使用 `pip`
+
+```bash
+# 在线安装
+pip install git+https://github.com/mcocdaa/hysmi-top.git
+
+# 或安装下载的 wheel 包
+pip install hysmi_top-0.2.0-py3-none-any.whl
+
+# 运行
+hysmi-top
+```
+
+### 方式三：克隆源码运行
+
+```bash
+git clone https://github.com/mcocdaa/hysmi-top.git
+cd hysmi-top
+
+# 使用 uv
+uv run hysmi-top
+# 或直接用 python
 python3 -m hysmi_top
+```
 
-# 模拟演示模式（无需物理硬件，内置正弦波、交叉、脉冲、阶梯、动态重合等多种曲线测试）
-python3 -m hysmi_top --demo
+## 命令行参数
 
-# 指定卡、刷新间隔、图表高度
-python3 -m hysmi_top -d 0-3 -r 500 -c 4
+```bash
+# 指定卡、刷新间隔、限制最大图表高度
+hysmi-top -d 0-3 -r 500 -c 4
 
-# 文本快照 / JSON
-python3 -m hysmi_top --once
-python3 -m hysmi_top --once --json
+# 模拟演示模式（无需物理硬件，内置多种动态曲线）
+hysmi-top --demo
+
+# 文本快照 / JSON 导出（便于脚本采集与 CI）
+hysmi-top --once
+hysmi-top --once --json
 ```
 
 键盘：`q` 退出，`+`/`-` 调整刷新速度。

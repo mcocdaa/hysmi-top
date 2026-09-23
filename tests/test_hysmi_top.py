@@ -151,6 +151,17 @@ class UiTest(unittest.TestCase):
                 if owner == MIX_OWNER:
                     self.assertEqual(bin(ord(ch) - 0x2800).count("1"), 1)
 
+    def test_overlay_compressed_chart_preserves_both_curves(self):
+        # In a 1-row chart, 0% util and 20% vram share the same braille cell.
+        # Both dots must be preserved rather than dropping the 0% curve.
+        rows = render_overlay([deque([0.0] * 8), deque([20.0] * 8)], width=4, height=1, utf8=True)
+        self.assertEqual(len(rows), 1)
+        for c in range(4):
+            ch, owner = rows[0][c]
+            self.assertEqual(owner, MIX_OWNER)
+            dots = bin(ord(ch) - 0x2800).count("1")
+            self.assertGreaterEqual(dots, 2, f"Both curves should be visible in cell: {ch}")
+
     def test_pod_layout(self):
         self.assertEqual(_pod_layout(80, 1), (0, 80))
         self.assertEqual(_pod_layout(80, 2), (8, 36))
@@ -194,6 +205,35 @@ class LayoutTest(unittest.TestCase):
     def test_tiny_window_reports_overflow(self):
         _per_row, _nrows, base, _extra = self.make()._layout(5, 80, 8)
         self.assertLess(base, 4)  # cannot fit even at minimum block height
+
+    def test_draw_tight_layout_bottom_row_chart_height(self):
+        top = self.make()
+        for d in range(8):
+            top.last_stats[d] = collect.HcuStats(
+                hcu_id=d,
+                util_percent=0.0 if d >= 6 else 50.0,
+                vram_used=int(0.25 * 64 * 1024**3 if d == 6 else 0),
+                vram_total=64 * 1024**3,
+                temp_milli=45000,
+                power_uw=120_000_000,
+            )
+            top.util[d] = deque([0.0 if d >= 6 else 50.0] * 20, maxlen=512)
+            top.vram[d] = deque([25.0 if d == 6 else 0.0] * 20, maxlen=512)
+
+        blocks_drawn = []
+        orig_draw_block = top._draw_block
+
+        def mock_draw_block(scr, s, top_y, left_x, width, chart_h, utf8, put, maxy=None):
+            blocks_drawn.append((s.hcu_id, chart_h))
+            orig_draw_block(scr, s, top_y, left_x, width, chart_h, utf8, put, maxy)
+
+        top._draw_block = mock_draw_block
+
+        scr = mock.Mock()
+        scr.getmaxyx.return_value = (16, 90)
+        top._draw(scr, True, {})
+        for hcu_id, chart_h in blocks_drawn:
+            self.assertEqual(chart_h, 2, f"HCU {hcu_id} chart_h should be 2, got {chart_h}")
 
 
 if __name__ == "__main__":

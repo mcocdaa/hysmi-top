@@ -92,17 +92,29 @@ def render_overlay(
         for c in range(width):
             owners: set[int] = set()
             top_dot = 0
+            d_rows: list[int] = []
             for dr in range(4):
                 for dc in range(2):
                     o = owner[g * 4 + dr][c * 2 + dc]
                     if o:
                         owners.add(o)
+                        d_rows.append(dr)
                         if top_dot == 0:
                             top_dot = _DOT_BITS[dr][dc]
             if owners:
                 if len(owners) > 1:
-                    # merged curves: collapse to a single dot
-                    cells.append((chr(_BRAILLE + top_dot) if utf8 else "*", MIX_OWNER))
+                    # merged curves: collapse to a single dot ONLY when curves are very close
+                    # in tall charts (e.g. 60% vs 65%), keeping lines thin as in nvtop.
+                    # When curves are distinct or chart is compressed, keep all dots so neither curve is lost.
+                    if height >= 3 and (max(d_rows) - min(d_rows) <= 1):
+                        cells.append((chr(_BRAILLE + top_dot) if utf8 else "*", MIX_OWNER))
+                    else:
+                        mask = 0
+                        for dr in range(4):
+                            for dc in range(2):
+                                if owner[g * 4 + dr][c * 2 + dc]:
+                                    mask |= _DOT_BITS[dr][dc]
+                        cells.append((chr(_BRAILLE + mask) if utf8 else "*", MIX_OWNER))
                 else:
                     mask = 0
                     for dr in range(4):
@@ -163,7 +175,7 @@ def _init_colors() -> dict[str, int]:
     curses.init_pair(pairs["proc"], curses.COLOR_CYAN, -1)
     curses.init_pair(pairs["dim"], curses.COLOR_BLACK, -1)
     curses.init_pair(pairs["err"], curses.COLOR_RED, -1)
-    curses.init_pair(pairs["mix"], curses.COLOR_BLUE, -1)
+    curses.init_pair(pairs["mix"], curses.COLOR_CYAN, -1)
     return pairs
 
 
@@ -268,13 +280,22 @@ class HySmiTop:
             brow = i // per_row
             block_h = base + (1 if brow < extra else 0)
             top = row + brow * base + min(brow, extra)
-            chart_h = block_h - 3
+            chart_h = max(1, base - 2 if base <= 5 else block_h - 3)
             if self.chart_h is not None:
                 chart_h = min(chart_h, self.chart_h)
-            self._draw_block(scr, s, top, (i % per_row) * stride, width, chart_h, utf8, put)
+            self._draw_block(scr, s, top, (i % per_row) * stride, width, chart_h, utf8, put, maxy)
 
     def _draw_block(
-        self, scr, s: HcuStats, top: int, left: int, width: int, chart_h: int, utf8: bool, put
+        self,
+        scr,
+        s: HcuStats,
+        top: int,
+        left: int,
+        width: int,
+        chart_h: int,
+        utf8: bool,
+        put,
+        maxy: int | None = None,
     ) -> None:
         right = left + width
         chart_w = max(4, width - 2)
@@ -296,11 +317,14 @@ class HySmiTop:
         put(top, x, f" u={s.util_percent:4.1f}%", "status", right)
 
         chart = render_overlay([self.util[s.hcu_id], self.vram[s.hcu_id]], chart_w, chart_h, utf8)
+        limit_y = maxy if maxy is not None else curses.LINES
         for r, cells in enumerate(chart):
             y = top + 1 + r
+            if y >= limit_y:
+                break
             x = left
             i = 0
-            while i < len(cells) and y < curses.LINES:
+            while i < len(cells):
                 owner = cells[i][1]
                 j = i
                 while j < len(cells) and cells[j][1] == owner:

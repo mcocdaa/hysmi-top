@@ -44,7 +44,7 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Run Unit Tests
-        run: uv run --python ${{ matrix.python-version }} python -m unittest discover -s tests
+        run: uv run --no-dev --python ${{ matrix.python-version }} python -m unittest discover -s tests
 
   build:
     name: Build Packages

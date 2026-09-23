@@ -25,7 +25,7 @@ ANSI = {
     "proc": "\033[36m",  # Cyan
     "dim": "\033[90m",  # Gray
     "err": "\033[31m",  # Red
-    "mix": "\033[1;36m",  # Bold Cyan
+    "mix": "\033[1;34m",  # Bold Blue
     "reset": "\033[0m",
 }
 

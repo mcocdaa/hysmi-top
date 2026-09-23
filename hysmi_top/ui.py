@@ -33,15 +33,15 @@ def _supports_utf8() -> bool:
 
 
 def _line_owner(owner: list[list[int]], x0: int, y0: int, x1: int, y1: int, val: int) -> None:
-    """Bresenham that marks grid[y][x] = val only where currently 0."""
+    """Bresenham that marks grid[y][x] |= val."""
     dx = abs(x1 - x0)
     sx = 1 if x0 < x1 else -1
     dy = -abs(y1 - y0)
     sy = 1 if y0 < y1 else -1
     err = dx + dy
     while True:
-        if 0 <= y0 < len(owner) and 0 <= x0 < len(owner[0]) and owner[y0][x0] == 0:
-            owner[y0][x0] = val
+        if 0 <= y0 < len(owner) and 0 <= x0 < len(owner[0]):
+            owner[y0][x0] |= val
         if x0 == x1 and y0 == y1:
             break
         e2 = 2 * err
@@ -66,7 +66,7 @@ def render_overlay(
     pix_h = height * 4
     owner: list[list[int]] = [[0] * pix_w for _ in range(pix_h)]
     for ci, series in enumerate(series_list):
-        val = ci + 1
+        val = 1 << ci
         n = len(series)
         offset = max(0, n - width)
         pts: list[tuple[int, int]] = []
@@ -81,8 +81,8 @@ def render_overlay(
             continue
         if len(pts) == 1:
             x, y = pts[0]
-            if 0 <= y < pix_h and 0 <= x < pix_w and owner[y][x] == 0:
-                owner[y][x] = val
+            if 0 <= y < pix_h and 0 <= x < pix_w:
+                owner[y][x] |= val
         else:
             for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
                 _line_owner(owner, x0, y0, x1, y1, val)
@@ -95,9 +95,11 @@ def render_overlay(
             d_rows: list[int] = []
             for dr in range(4):
                 for dc in range(2):
-                    o = owner[g * 4 + dr][c * 2 + dc]
-                    if o:
-                        owners.add(o)
+                    mask_val = owner[g * 4 + dr][c * 2 + dc]
+                    if mask_val:
+                        for ci in range(len(series_list)):
+                            if mask_val & (1 << ci):
+                                owners.add(ci + 1)
                         d_rows.append(dr)
                         if top_dot == 0:
                             top_dot = _DOT_BITS[dr][dc]
@@ -175,7 +177,7 @@ def _init_colors() -> dict[str, int]:
     curses.init_pair(pairs["proc"], curses.COLOR_CYAN, -1)
     curses.init_pair(pairs["dim"], curses.COLOR_BLACK, -1)
     curses.init_pair(pairs["err"], curses.COLOR_RED, -1)
-    curses.init_pair(pairs["mix"], curses.COLOR_CYAN, -1)
+    curses.init_pair(pairs["mix"], curses.COLOR_BLUE, -1)
     return pairs
 
 
@@ -246,7 +248,10 @@ class HySmiTop:
             return
 
         def attr(name: str) -> int:
-            return curses.color_pair(colors[name]) if name in colors else 0
+            base_attr = curses.color_pair(colors[name]) if name in colors else 0
+            if name == "mix":
+                return base_attr | curses.A_BOLD
+            return base_attr
 
         def put(y: int, x: int, text: str, name: str = "dim", limit: int | None = None) -> None:
             if y < 0 or y >= maxy or x >= maxx:

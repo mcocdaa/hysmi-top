@@ -151,6 +151,14 @@ class UiTest(unittest.TestCase):
                 if owner == MIX_OWNER:
                     self.assertEqual(bin(ord(ch) - 0x2800).count("1"), 1)
 
+    def test_overlay_exact_identical_curves_trigger_mix(self):
+        # exactly identical series (e.g. both 50.0% or both 0.0%) must trigger MIX_OWNER (blue)
+        rows = render_overlay([deque([50.0] * 8), deque([50.0] * 8)], width=4, height=4, utf8=True)
+        owners = {rows[r][c][1] for r in range(4) for c in range(4)}
+        self.assertIn(MIX_OWNER, owners)
+        self.assertNotIn(0, owners)
+        self.assertNotIn(1, owners)
+
     def test_overlay_compressed_chart_preserves_both_curves(self):
         # In a 1-row chart, 0% util and 20% vram share the same braille cell.
         # Both dots must be preserved rather than dropping the 0% curve.

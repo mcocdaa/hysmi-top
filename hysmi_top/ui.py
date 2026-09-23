@@ -117,9 +117,17 @@ def render_overlay(
                 # 只有单一曲线
                 cells.append((chr(_BRAILLE + mask) if utf8 else "*", owners.pop()))
             else:
-                # 邻近但不完全重合（如 60% vs 65%，或紧凑高度下不同数值共存一个字符单元）：
-                # 绝不变蓝色！保留各自点阵，显示主曲线颜色（0 = util 绿色）
-                cells.append((chr(_BRAILLE + mask) if utf8 else "*", 0))
+                # 邻近但不完全重合（如 100% vs 90%，或紧凑高度下不同数值共存一个字符单元）：
+                # 绝不变蓝色，更不能将显存统一染成绿色或将算力染成红色！
+                # 按列交替渲染各曲线点阵，确保每条曲线都保留自身准确颜色（算力=绿，显存=红/品红）
+                sorted_owners = sorted(owners)
+                active_ci = sorted_owners[c % len(sorted_owners)]
+                active_mask = 0
+                for dr in range(4):
+                    for dc in range(2):
+                        if owner[g * 4 + dr][c * 2 + dc] & (1 << active_ci):
+                            active_mask |= _DOT_BITS[dr][dc]
+                cells.append((chr(_BRAILLE + active_mask) if utf8 else "*", active_ci))
         rows.append(cells)
     return rows
 

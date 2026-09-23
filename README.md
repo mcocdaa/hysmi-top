@@ -43,15 +43,15 @@ uv tool install git+https://github.com/mcocdaa/hysmi-top.git
 #### 2. 离线 / 内网服务器安装（无外网环境）
 
 海光 DCU 计算节点若无法访问外网：
-1. 在有网电脑上访问 [GitHub Releases v0.2.0](https://github.com/mcocdaa/hysmi-top/releases/tag/v0.2.0) 下载 Wheel 文件：
-   - 文件名：`hysmi_top-0.2.0-py3-none-any.whl`
+1. 在有网电脑上访问 [GitHub Releases](https://github.com/mcocdaa/hysmi-top/releases) 下载最新 Wheel 文件：
+   - 文件名：`hysmi_top-0.2.1-py3-none-any.whl`
 2. 将文件拷贝至目标服务器，执行安装：
    ```bash
    # 使用 uv tool 全局独立安装：
-   uv tool install ./hysmi_top-0.2.0-py3-none-any.whl
+   uv tool install ./hysmi_top-0.2.1-py3-none-any.whl
 
    # 或者使用 uv pip 安装到当前环境/系统 Python：
-   uv pip install --system ./hysmi_top-0.2.0-py3-none-any.whl
+   uv pip install --system ./hysmi_top-0.2.1-py3-none-any.whl
    ```
 
 #### 3. 免安装一次性运行（uvx）

@@ -152,11 +152,13 @@ class UiTest(unittest.TestCase):
                     self.assertEqual(bin(ord(ch) - 0x2800).count("1"), 1)
 
     def test_overlay_adjacent_curves_not_blue(self):
-        # adjacent but non-identical curves (60.0% vs 65.0%) must NOT be blue
+        # adjacent but non-identical curves (60.0% vs 65.0%) must NOT be blue,
+        # but must preserve both curves' true colors (0 and 1) alternating by column
         rows = render_overlay([deque([60.0] * 8), deque([65.0] * 8)], width=4, height=4, utf8=True)
         owners = {rows[r][c][1] for r in range(4) for c in range(4)}
         self.assertNotIn(MIX_OWNER, owners)
         self.assertIn(0, owners)
+        self.assertIn(1, owners)
 
     def test_overlay_exact_identical_curves_trigger_mix(self):
         # exactly identical series (e.g. both 50.0% or both 0.0%) must trigger MIX_OWNER (blue)
@@ -167,15 +169,16 @@ class UiTest(unittest.TestCase):
         self.assertNotIn(1, owners)
 
     def test_overlay_compressed_chart_preserves_both_curves(self):
-        # In a 1-row chart, 0% util and 20% vram share the same braille cell.
-        # Both dots must be preserved, and non-overlapping curves must NOT be blue.
+        # In a 1-row chart, 0% util and 20% vram share the same braille band.
+        # Both curves must alternate columns so each preserves its own color (0 and 1), and not blue.
         rows = render_overlay([deque([0.0] * 8), deque([20.0] * 8)], width=4, height=1, utf8=True)
         self.assertEqual(len(rows), 1)
+        owners = [rows[0][c][1] for c in range(4)]
+        self.assertEqual(owners, [0, 1, 0, 1])
         for c in range(4):
             ch, owner = rows[0][c]
-            self.assertEqual(owner, 0)
-            dots = bin(ord(ch) - 0x2800).count("1")
-            self.assertGreaterEqual(dots, 2, f"Both curves should be visible in cell: {ch}")
+            self.assertNotEqual(ch, " ")
+            self.assertNotEqual(owner, MIX_OWNER)
 
     def test_overlay_linear_crossing(self):
         # Crossing series with exact 50.0% overlap at center index 10
@@ -186,6 +189,16 @@ class UiTest(unittest.TestCase):
         self.assertIn(0, owners)  # util present
         self.assertIn(1, owners)  # vram present
         self.assertIn(MIX_OWNER, owners)  # intersection detected as mix
+
+    def test_overlay_adjacent_high_util_and_vram_colors(self):
+        # Specific user bug case: 100.0% util and 90.0% vram in height=6 chart.
+        # Must preserve both green util (0) and magenta vram (1), alternating by column without turning all green or blue.
+        u = deque([100.0] * 10, maxlen=512)
+        v = deque([90.0] * 10, maxlen=512)
+        rows = render_overlay([u, v], width=10, height=6, utf8=True)
+        row0_owners = [rows[0][c][1] for c in range(10)]
+        self.assertEqual(row0_owners, [0, 1] * 5)
+        self.assertNotIn(MIX_OWNER, row0_owners)
 
     def test_demo_mode_poll(self):
         top = HySmiTop(list(range(8)), 1000, demo=True)

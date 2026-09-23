@@ -257,14 +257,41 @@ def inspect_patterns():
     v25 = deque([25.0] * 30, maxlen=512)
 
     c1 = render_overlay([u0, v25], 25, 1, True)
-    print("1-Row Chart (chart_h=1): Both dots preserved in braille cell:")
-    print("".join(f"{ANSI['mix']}{ch}{ANSI['reset']}" for ch, o in c1[0]))
+    print("1-Row Chart (chart_h=1): Both dots preserved, alternating true colors:")
+    line = []
+    for ch, o in c1[0]:
+        color = ANSI[_CURVE_COLORS[o]] if o is not None and o >= 0 else ANSI["dim"]
+        line.append(f"{color}{ch}{ANSI['reset']}")
+    print("".join(line))
 
     c2 = render_overlay([u0, v25], 25, 2, True)
     print("\n2-Row Chart (chart_h=2, tight screen fix):")
     for r, row in enumerate(c2):
-        line = "".join(f"{ANSI['mix']}{ch}{ANSI['reset']}" if o else ch for ch, o in row)
-        print(f"Row {r}: {line}")
+        line = []
+        for ch, o in row:
+            color = ANSI[_CURVE_COLORS[o]] if o is not None and o >= 0 else ANSI["dim"]
+            line.append(f"{color}{ch}{ANSI['reset']}")
+        print(f"Row {r}: " + "".join(line))
+
+    print("\n" + "=" * 80)
+    print("PATTERN 4: ADJACENT HIGH CURVES (100% Util vs 90% VRAM)")
+    print(
+        "Top dots are Green (HCU), bottom dots are Magenta (VRAM) without mutual color swallowing"
+    )
+    print("=" * 80)
+    u100 = deque([100.0] * 30, maxlen=512)
+    v90 = deque([90.0] * 30, maxlen=512)
+    c4 = render_overlay([u100, v90], 30, 4, True)
+    for r, row in enumerate(c4):
+        line = []
+        for ch, o in row:
+            if o == MIX_OWNER:
+                line.append(f"{ANSI['mix']}{ch}{ANSI['reset']}")
+            elif o is not None and o >= 0:
+                line.append(f"{ANSI[_CURVE_COLORS[o]]}{ch}{ANSI['reset']}")
+            else:
+                line.append(ch)
+        print(f"Row {r}: " + "".join(line))
 
 
 if __name__ == "__main__":

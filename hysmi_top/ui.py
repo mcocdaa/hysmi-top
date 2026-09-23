@@ -276,8 +276,12 @@ class HySmiTop:
                 return 0
             if key in (ord("+"), ord("=")):
                 self.refresh_ms = max(200, self.refresh_ms - 200)
+                self._draw(scr, utf8, colors)
+                scr.refresh()
             if key in (ord("-"), ord("_")):
                 self.refresh_ms = min(10000, self.refresh_ms + 200)
+                self._draw(scr, utf8, colors)
+                scr.refresh()
             if now - last_update >= self.refresh_ms / 1000.0:
                 self.poll()
                 self._draw(scr, utf8, colors)
@@ -334,7 +338,7 @@ class HySmiTop:
         row = 0
         put(row, 0, "hysmi-top  -  Hygon DCU monitor", "title")
         row += 1
-        put(row, 0, "q:quit  +/-:speed", "dim")
+        put(row, 0, f"q:quit  +/-:speed ({self.refresh_ms / 1000:.1f}s)", "dim")
         row += 1
 
         devs = [s for s in self.last_stats.values()]

@@ -283,6 +283,66 @@ class LayoutTest(unittest.TestCase):
         for hcu_id, chart_h in blocks_drawn:
             self.assertEqual(chart_h, 2, f"HCU {hcu_id} chart_h should be 2, got {chart_h}")
 
+    def test_draw_22_line_window_bottom_row_uniform_and_in_bounds(self):
+        # Specific user bug case: 8 cards in 22-line terminal (maxy=22, maxx=108).
+        # Bottom row cards (HCU 6, 7) must have the exact same chart_h (4) as HCU 0..5,
+        # and the status row must fit within maxy without being dropped or corrupted.
+        top = self.make()
+        for d in range(8):
+            top.last_stats[d] = collect.HcuStats(
+                hcu_id=d,
+                util_percent=0.0,
+                vram_used=0,
+                vram_total=64 * 1024**3,
+                temp_milli=33000,
+                power_uw=133_000_000,
+            )
+            top.util[d] = deque([0.0] * 35, maxlen=512)
+            top.vram[d] = deque([0.0] * 35, maxlen=512)
+
+        blocks_drawn = []
+        orig_draw_block = top._draw_block
+
+        def mock_draw_block(scr, s, top_y, left_x, width, chart_h, utf8, put, maxy=None):
+            blocks_drawn.append((s.hcu_id, top_y, chart_h))
+            orig_draw_block(scr, s, top_y, left_x, width, chart_h, utf8, put, maxy)
+
+        top._draw_block = mock_draw_block
+
+        scr = mock.Mock()
+        scr.getmaxyx.return_value = (22, 108)
+        top._draw(scr, True, {})
+
+        for hcu_id, top_y, chart_h in blocks_drawn:
+            self.assertEqual(chart_h, 4, f"HCU {hcu_id} should have chart_h=4, got {chart_h}")
+            status_y = top_y + 1 + chart_h
+            self.assertLessEqual(
+                status_y, 21, f"HCU {hcu_id} status_y={status_y} exceeds maxy-1=21"
+            )
+
+    def test_draw_screen_resize_triggers_clear(self):
+        top = self.make()
+        top.last_stats[0] = collect.HcuStats(hcu_id=0)
+        scr = mock.Mock()
+        scr.getmaxyx.return_value = (24, 80)
+        top._draw(scr, True, {})
+        # First draw records size (24, 80)
+        self.assertEqual(top._last_size, (24, 80))
+
+        # Second draw with same size uses erase
+        scr.reset_mock()
+        scr.getmaxyx.return_value = (24, 80)
+        top._draw(scr, True, {})
+        scr.erase.assert_called_once()
+        scr.clear.assert_not_called()
+
+        # Third draw with changed size (e.g., 22, 80) must trigger scr.clear()
+        scr.reset_mock()
+        scr.getmaxyx.return_value = (22, 80)
+        top._draw(scr, True, {})
+        scr.clear.assert_called_once()
+        self.assertEqual(top._last_size, (22, 80))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -42,6 +42,9 @@ class ScreenBuffer:
     def erase(self):
         self.cells = [[(" ", None) for _ in range(self.maxx)] for _ in range(self.maxy)]
 
+    def clear(self):
+        self.erase()
+
     def getmaxyx(self):
         return self.maxy, self.maxx
 

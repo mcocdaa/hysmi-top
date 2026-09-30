@@ -271,9 +271,21 @@ class HySmiTop:
         last_update = 0.0
         while True:
             now = time.time()
-            key = scr.getch()
+            try:
+                key = scr.getch()
+            except curses.error:
+                key = -1
             if key in (ord("q"), ord("Q"), 27):
                 return 0
+            if key in (curses.KEY_RESIZE,):
+                try:
+                    curses.update_lines_cols()
+                except Exception:
+                    pass
+                scr.clear()
+                self._draw(scr, utf8, colors)
+                scr.refresh()
+                continue
             if key in (ord("+"), ord("=")):
                 self.refresh_ms = max(200, self.refresh_ms - 200)
                 self._draw(scr, utf8, colors)
@@ -311,8 +323,14 @@ class HySmiTop:
             return per_row, nrows, base, 0
 
     def _draw(self, scr, utf8: bool, colors: dict[str, int]) -> None:
-        scr.erase()
         maxy, maxx = scr.getmaxyx()
+        last_size = getattr(self, "_last_size", None)
+        if last_size is not None and last_size != (maxy, maxx):
+            scr.clear()
+        else:
+            scr.erase()
+        self._last_size = (maxy, maxx)
+
         if maxy < 6 or maxx < 12:
             scr.addstr(0, 0, "terminal too small")
             return
@@ -327,6 +345,8 @@ class HySmiTop:
             if y < 0 or y >= maxy or x >= maxx:
                 return
             right = min(maxx, limit) if limit is not None else maxx
+            if y == maxy - 1:
+                right = min(right, maxx - 1)
             text = text[: max(0, right - x)]
             if not text:
                 return
@@ -351,13 +371,12 @@ class HySmiTop:
             return
         gap_w, width = _pod_layout(maxx, per_row)
         stride = width + gap_w
+        chart_h = max(1, base - 2)
+        if self.chart_h is not None:
+            chart_h = min(chart_h, self.chart_h)
         for i, s in enumerate(sorted(devs, key=lambda x: x.hcu_id)):
             brow = i // per_row
-            block_h = base + (1 if brow < extra else 0)
             top = row + brow * base + min(brow, extra)
-            chart_h = max(1, base - 2 if base <= 5 else block_h - 3)
-            if self.chart_h is not None:
-                chart_h = min(chart_h, self.chart_h)
             self._draw_block(scr, s, top, (i % per_row) * stride, width, chart_h, utf8, put, maxy)
 
     def _draw_block(

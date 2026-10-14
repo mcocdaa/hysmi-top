@@ -37,7 +37,9 @@ class ScreenBuffer:
     def __init__(self, maxy: int, maxx: int):
         self.maxy = maxy
         self.maxx = maxx
-        self.cells = [[(" ", None) for _ in range(maxx)] for _ in range(maxy)]
+        self.cells: list[list[tuple[str, int | None]]] = [
+            [(" ", None) for _ in range(maxx)] for _ in range(maxy)
+        ]
 
     def erase(self):
         self.cells = [[(" ", None) for _ in range(self.maxx)] for _ in range(self.maxy)]
@@ -68,8 +70,9 @@ class ScreenBuffer:
             cur_style = None
             for x in range(self.maxx):
                 ch, pair_id = self.cells[y][x]
-                style_name = id_to_name.get(pair_id)
-                ansi_code = ANSI.get(style_name, "")
+                pair_num = (pair_id & 0xFF) if pair_id is not None else None
+                style_name = id_to_name.get(pair_num) if pair_num is not None else None
+                ansi_code = ANSI.get(style_name, "") if style_name is not None else ""
                 if ansi_code != cur_style:
                     if cur_style:
                         out.append(ANSI["reset"])

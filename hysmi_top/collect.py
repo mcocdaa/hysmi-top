@@ -15,13 +15,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 DRM_DIR = Path("/sys/class/drm")
+KFD_PROC_DIR = Path("/sys/class/kfd/kfd/proc")
 HYCU_DRIVER = "hycu"
+_DRIVER_NAMES = {"hycu", "hydcu", "amdgpu"}
 
 HY_SMI_BIN = os.environ.get("HYSMI_BIN") or shutil.which("hy-smi") or "/opt/hyhal/bin/hy-smi"
 
 _PID_RE = re.compile(r"^PID:\s+(\d+)\s*$")
-_HCU_INDEX_RE = re.compile(r"HCU Index:\s*\[\s*['\"]?(\d+)['\"]?\s*\]")
+_HCU_INDEX_RE = re.compile(r"HCU Index:\s*\[\s*(?:[^\]\d]*(\d+)[^\]]*)?\]")
 _VRAM_MIB_RE = re.compile(r"VRAM USED\(MiB\):\s*(\d+)")
+_TABULAR_PID_RE = re.compile(r"^\s*(\d+)\s+(\S+)\s+(\d+)\s+(\d+)\s*$")
 
 
 def _proc_name(pid: int) -> str:
@@ -101,8 +104,8 @@ def _read_int(path: Path, default: int = 0) -> int:
 def discover_devices() -> list[Path]:
     """Return the sysfs card dirs for Hygon DCUs, ordered by card number.
 
-    Cards whose PCI driver is ``hycu`` are treated as Hygon DCUs; ordering by
-    card number matches hy-smi output (card1 -> HCU 0, card2 -> HCU 1, ...).
+    Cards whose PCI driver is in ``_DRIVER_NAMES`` are treated as Hygon DCUs;
+    ordering by card number matches hy-smi output (card1 -> HCU 0, card2 -> HCU 1, ...).
     """
     cards: list[Path] = []
     if not DRM_DIR.is_dir():
@@ -112,24 +115,25 @@ def discover_devices() -> list[Path]:
         if not num.isdigit():
             continue
         driver = card / "device" / "driver"
-        if driver.is_symlink() and driver.resolve().name == HYCU_DRIVER:
+        if driver.is_symlink() and driver.resolve().name in _DRIVER_NAMES:
             cards.append(card)
     cards.sort(key=lambda p: int(p.name[4:]))
     return cards
 
 
-def _card_dir_for(hcu_id: int) -> Path | None:
+def _card_dir_for(hcu_id: int, cards: list[Path] | None = None) -> Path | None:
     """Map an HCU id back to its sysfs card directory (card1 -> HCU 0)."""
-    cards = discover_devices()
+    if cards is None:
+        cards = discover_devices()
     if hcu_id < 0 or hcu_id >= len(cards):
         return None
     return cards[hcu_id] / "device"
 
 
-def read_device(hcu_id: int) -> HcuStats:
+def read_device(hcu_id: int, cards: list[Path] | None = None) -> HcuStats:
     """Read one HCU from sysfs."""
     stats = HcuStats(hcu_id=hcu_id, name=f"HCU {hcu_id}")
-    dev = _card_dir_for(hcu_id)
+    dev = _card_dir_for(hcu_id, cards=cards)
     if dev is None:
         stats.ok = False
         stats.error = "no sysfs device"
@@ -141,7 +145,10 @@ def read_device(hcu_id: int) -> HcuStats:
         hw = next(dev.glob("hwmon/hwmon*"), None)
         if hw is not None:
             stats.temp_milli = _read_int(hw / "temp1_input")
-            stats.power_uw = _read_int(hw / "power1_average")
+            power_uw = _read_int(hw / "power1_average")
+            if power_uw <= 0:
+                power_uw = _read_int(hw / "power1_input")
+            stats.power_uw = power_uw
             stats.sclk_hz = _read_int(hw / "freq1_input")
             stats.mclk_hz = _read_int(hw / "freq2_input")
     except Exception as exc:  # noqa: BLE001 - keep loop alive on any read error
@@ -151,9 +158,32 @@ def read_device(hcu_id: int) -> HcuStats:
 
 
 def collect_all(device_ids: list[int] | None = None) -> list[HcuStats]:
+    cards = discover_devices()
     if device_ids is None:
-        device_ids = list(range(len(discover_devices())))
-    return [read_device(i) for i in device_ids]
+        device_ids = list(range(len(cards)))
+    return [read_device(i, cards=cards) for i in device_ids]
+
+
+def _read_kfd_processes() -> list[HcuProcess]:
+    procs: list[HcuProcess] = []
+    if not KFD_PROC_DIR.is_dir():
+        return procs
+    for entry in sorted(KFD_PROC_DIR.iterdir(), key=lambda p: p.name):
+        if not entry.name.isdigit():
+            continue
+        pid = int(entry.name)
+        vram_bytes = 0
+        device_id = -1
+        for vram_file in sorted(entry.glob("vram_*")):
+            val = _read_int(vram_file, default=0)
+            if val > 0:
+                vram_bytes += val
+                if device_id < 0:
+                    suffix = vram_file.name[5:]
+                    if suffix.isdigit():
+                        device_id = int(suffix)
+        procs.append(HcuProcess(pid=pid, device=device_id, name=_proc_name(pid), memory=vram_bytes))
+    return procs
 
 
 def read_processes() -> list[HcuProcess]:
@@ -171,7 +201,7 @@ def read_processes() -> list[HcuProcess]:
             check=False,
         ).stdout
     except (OSError, subprocess.SubprocessError):
-        return []
+        return _read_kfd_processes()
     procs: list[HcuProcess] = []
     cur: HcuProcess | None = None
     for line in out.splitlines():
@@ -182,15 +212,30 @@ def read_processes() -> list[HcuProcess]:
             pid = int(m.group(1))
             cur = HcuProcess(pid=pid, name=_proc_name(pid))
             continue
-        if cur is None:
-            continue
-        mi = _HCU_INDEX_RE.search(line)
-        if mi:
-            cur.device = int(mi.group(1))
-            continue
-        mv = _VRAM_MIB_RE.search(line)
-        if mv:
-            cur.memory = int(mv.group(1)) * 1024**2
+        if cur is not None:
+            mi = _HCU_INDEX_RE.search(line)
+            if mi and mi.group(1) is not None:
+                cur.device = int(mi.group(1))
+                continue
+            mv = _VRAM_MIB_RE.search(line)
+            if mv:
+                cur.memory = int(mv.group(1)) * 1024**2
+                continue
+        else:
+            mt = _TABULAR_PID_RE.match(line)
+            if mt:
+                pid = int(mt.group(1))
+                name = mt.group(2)
+                dev = int(mt.group(3))
+                mem_mib = int(mt.group(4))
+                procs.append(
+                    HcuProcess(
+                        pid=pid,
+                        device=dev,
+                        name=name if name != "?" else _proc_name(pid),
+                        memory=mem_mib * 1024**2,
+                    )
+                )
     if cur is not None:
         procs.append(cur)
     return procs

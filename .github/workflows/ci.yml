@@ -7,6 +7,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint & Format Check
@@ -20,10 +23,13 @@ jobs:
           enable-cache: true
 
       - name: Run Ruff Check
-        run: uvx ruff check .
+        run: uv run --frozen ruff check .
 
       - name: Run Ruff Format Check
-        run: uvx ruff format --check .
+        run: uv run --frozen ruff format --check .
+
+      - name: Run Mypy
+        run: uv run --frozen mypy hysmi_top tests
 
   test:
     name: Test (Python ${{ matrix.python-version }})

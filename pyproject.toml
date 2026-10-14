@@ -54,6 +54,8 @@ include = ["hysmi_top*"]
 
 [dependency-groups]
 dev = [
+    "mypy>=1.14.0",
+    "pytest>=8.0.0",
     "ruff>=0.9.0",
 ]
 

@@ -12,24 +12,38 @@ from . import __version__
 from .collect import collect_all, discover_devices, read_processes
 from .ui import DEFAULT_REFRESH_MS, HySmiTop
 
+MAX_DEVICES = 256
+
 
 def _parse_devices(text: str) -> list[int]:
-    ids: list[int] = []
-    for part in text.split(","):
-        part = part.strip()
-        if not part:
-            continue
-        if "-" in part:
-            a, b = part.split("-", 1)
-            ids.extend(range(int(a), int(b) + 1))
-        else:
-            ids.append(int(part))
     seen: set[int] = set()
     result: list[int] = []
-    for d in ids:
-        if d >= 0 and d not in seen:
-            seen.add(d)
-            result.append(d)
+    for part in text.split(","):
+        part = part.strip()
+        if not part or part.startswith("-"):
+            continue
+        if "-" in part:
+            a_str, b_str = part.split("-", 1)
+            try:
+                a = int(a_str.strip())
+                b = int(b_str.strip())
+            except ValueError:
+                continue
+            if a < 0 or b < 0 or a > b:
+                continue
+            b = min(b, a + MAX_DEVICES - 1)
+            for d in range(a, b + 1):
+                if d not in seen and len(result) < MAX_DEVICES:
+                    seen.add(d)
+                    result.append(d)
+        else:
+            try:
+                d = int(part)
+            except ValueError:
+                continue
+            if d >= 0 and d not in seen and len(result) < MAX_DEVICES:
+                seen.add(d)
+                result.append(d)
     return result
 
 
@@ -59,7 +73,15 @@ def _snapshot(device_ids: list[int], as_json: bool, demo: bool = False) -> int:
                 }
                 for s in stats
             ],
-            "processes": [{"pid": p.pid, "name": p.name} for p in procs],
+            "processes": [
+                {
+                    "pid": p.pid,
+                    "name": p.name,
+                    "device": p.device,
+                    "memory_mib": p.memory,
+                }
+                for p in procs
+            ],
         }
         print(json.dumps(payload, indent=2))
         return 0
@@ -75,7 +97,7 @@ def _snapshot(device_ids: list[int], as_json: bool, demo: bool = False) -> int:
             f"sclk={s.sclk_mhz:.0f}M mclk={s.mclk_mhz:.0f}M{flag}"
         )
     for p in procs:
-        print(f"  proc {p.pid}: {p.name}")
+        print(f"  proc {p.pid}: {p.name} (HCU {p.device}, {p.memory:.0f} MiB)")
     return 0
 
 

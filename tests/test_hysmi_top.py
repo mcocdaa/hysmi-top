@@ -129,7 +129,7 @@ class UiTest(unittest.TestCase):
 
     def test_overlay_ascii_fallback(self):
         rows = render_overlay([deque([100.0])], width=3, height=4, utf8=False)
-        self.assertEqual(rows[0][0][0], "*")
+        self.assertEqual(rows[0][2][0], "*")
 
     def test_overlay_two_curves(self):
         rows = render_overlay([deque([0.0] * 8), deque([100.0] * 8)], width=4, height=4, utf8=True)
@@ -138,18 +138,18 @@ class UiTest(unittest.TestCase):
         self.assertIn(1, owners)  # high curve (vram=100) present
 
     def test_overlay_merged_mix_single_dot(self):
-        # exactly identical series (complete overlap) -> single dot and blue mix
+        # exactly identical series (complete overlap) -> continuous solid line and blue mix
         rows = render_overlay([deque([60.0] * 8), deque([60.0] * 8)], width=4, height=4, utf8=True)
         owners = {rows[r][c][1] for r in range(4) for c in range(4)}
         self.assertIn(MIX_OWNER, owners)
         self.assertNotIn(0, owners)
         self.assertNotIn(1, owners)
-        # every merged cell must be a single dot, not a double dot
+        # every merged cell must preserve both sub-column dots (continuous line)
         for r in range(4):
             for c in range(4):
                 ch, owner = rows[r][c]
                 if owner == MIX_OWNER:
-                    self.assertEqual(bin(ord(ch) - 0x2800).count("1"), 1)
+                    self.assertGreaterEqual(bin(ord(ch) - 0x2800).count("1"), 2)
 
     def test_overlay_adjacent_curves_not_blue(self):
         # adjacent but non-identical curves (60.0% vs 65.0%) must NOT be blue,

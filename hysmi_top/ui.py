@@ -68,51 +68,61 @@ def render_overlay(
     for ci, series in enumerate(series_list):
         val = 1 << ci
         n = len(series)
-        offset = max(0, n - width)
+        if n == 0:
+            continue
+        count = min(n, width)
+        offset = n - count
+        start_col = width - count
         pts: list[tuple[int, int]] = []
-        for col in range(width):
-            idx = offset + col
-            if idx >= n:
-                break
-            value = max(0.0, min(100.0, series[idx]))
+        for i in range(count):
+            col = start_col + i
+            value = max(0.0, min(100.0, series[offset + i]))
             y = round((100.0 - value) / 100.0 * (pix_h - 1))
             pts.append((col * 2, y))
-        if not pts:
-            continue
-        if len(pts) == 1:
-            x, y = pts[0]
-            if 0 <= y < pix_h and 0 <= x < pix_w:
-                owner[y][x] |= val
-        else:
-            for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
-                _line_owner(owner, x0, y0, x1, y1, val)
+        if pts:
+            pts.append((pix_w - 1, pts[-1][1]))
+        for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+            _line_owner(owner, x0, y0, x1, y1, val)
     rows: list[list[tuple[str, int | None]]] = []
     for g in range(height):
         cells: list[tuple[str, int | None]] = []
         for c in range(width):
             owners: set[int] = set()
+            owner_bits: dict[int, int] = {}
+            owner_drs: dict[int, list[int]] = {}
             exact_overlap = False
-            top_dot = 0
             mask = 0
             for dr in range(4):
                 for dc in range(2):
                     mask_val = owner[g * 4 + dr][c * 2 + dc]
                     if mask_val:
-                        mask |= _DOT_BITS[dr][dc]
-                        if top_dot == 0:
-                            top_dot = _DOT_BITS[dr][dc]
+                        dot_bit = _DOT_BITS[dr][dc]
+                        mask |= dot_bit
                         # Check if multiple curves share this EXACT pixel
                         if mask_val & (mask_val - 1) != 0:
                             exact_overlap = True
                         for ci in range(len(series_list)):
                             if mask_val & (1 << ci):
                                 owners.add(ci)
+                                owner_bits[ci] = owner_bits.get(ci, 0) | dot_bit
+                                owner_drs.setdefault(ci, []).append(dr)
+            if len(owners) > 1 and not exact_overlap:
+                sorted_o = sorted(owners)
+                for idx_a, oa in enumerate(sorted_o):
+                    min_a, max_a = min(owner_drs[oa]), max(owner_drs[oa])
+                    for ob in sorted_o[idx_a + 1 :]:
+                        min_b, max_b = min(owner_drs[ob]), max(owner_drs[ob])
+                        if max(min_a, min_b) <= min(max_a, max_b):
+                            exact_overlap = True
+                            break
             if not owners:
                 cells.append((" ", None))
             elif exact_overlap:
-                # 完全重合（同坐标像素重叠）：必须完全重合才是蓝色 MIX_OWNER！
-                # 若两条曲线在该点完全重合，合并为单点高亮蓝色显示
-                cells.append((chr(_BRAILLE + top_dot) if utf8 else "*", MIX_OWNER))
+                # 完全重合或交叉：合并所有重合曲线在该单元格内的点阵位，保持高亮蓝色实线连续不断裂
+                bits = 0
+                for o in owners:
+                    bits |= owner_bits[o]
+                cells.append((chr(_BRAILLE + bits) if utf8 else "*", MIX_OWNER))
             elif len(owners) == 1:
                 # 只有单一曲线
                 cells.append((chr(_BRAILLE + mask) if utf8 else "*", owners.pop()))
@@ -122,14 +132,13 @@ def render_overlay(
                 # 按列交替渲染各曲线点阵，确保每条曲线都保留自身准确颜色（算力=绿，显存=红/品红）
                 sorted_owners = sorted(owners)
                 active_ci = sorted_owners[c % len(sorted_owners)]
-                active_mask = 0
-                for dr in range(4):
-                    for dc in range(2):
-                        if owner[g * 4 + dr][c * 2 + dc] & (1 << active_ci):
-                            active_mask |= _DOT_BITS[dr][dc]
+                active_mask = owner_bits[active_ci]
                 cells.append((chr(_BRAILLE + active_mask) if utf8 else "*", active_ci))
         rows.append(cells)
     return rows
+
+
+render_multi_braille = render_overlay
 
 
 def _pod_layout(maxx: int, per_row: int) -> tuple[int, int]:
@@ -192,8 +201,8 @@ class HySmiTop:
         demo: bool = False,
     ):
         self.device_ids = device_ids
-        self.refresh_ms = refresh_ms
-        self.chart_h = chart_h
+        self.refresh_ms = max(100, min(10000, refresh_ms))
+        self.chart_h = max(1, chart_h) if chart_h is not None else None
         self.demo = demo
         self._tick = 0
         self.util: dict[int, deque[float]] = {d: deque(maxlen=512) for d in device_ids}
@@ -287,7 +296,7 @@ class HySmiTop:
                 scr.refresh()
                 continue
             if key in (ord("+"), ord("=")):
-                self.refresh_ms = max(200, self.refresh_ms - 200)
+                self.refresh_ms = max(100, self.refresh_ms - 200)
                 self._draw(scr, utf8, colors)
                 scr.refresh()
             if key in (ord("-"), ord("_")):
@@ -311,6 +320,8 @@ class HySmiTop:
         is below 4 and the caller shows an overflow message.
         """
         avail_h = maxy - 2
+        if ndev <= 0:
+            return 1, 1, avail_h, 0
         per_row = min(ndev, max(1, maxx // MIN_BLOCK_W))
         while True:
             nrows = (ndev + per_row - 1) // per_row
@@ -318,7 +329,7 @@ class HySmiTop:
             if base >= 4:
                 return per_row, nrows, base, avail_h % nrows
             if per_row < ndev:
-                per_row = min(ndev, per_row * 2)
+                per_row = min(ndev, per_row + 1)
                 continue
             return per_row, nrows, base, 0
 
@@ -373,7 +384,7 @@ class HySmiTop:
         stride = width + gap_w
         chart_h = max(1, base - 2)
         if self.chart_h is not None:
-            chart_h = min(chart_h, self.chart_h)
+            chart_h = max(1, min(chart_h, self.chart_h))
         for i, s in enumerate(sorted(devs, key=lambda x: x.hcu_id)):
             brow = i // per_row
             top = row + brow * base + min(brow, extra)
@@ -433,4 +444,6 @@ class HySmiTop:
                 x += j - i
                 i = j
         status = f"v={_fmt_mem(s.vram_used)}/{_fmt_mem(s.vram_total)}  {s.temp_c:4.1f}C {s.power_w:5.1f}W"
+        if width >= 40:
+            status += f" {s.sclk_mhz:.0f}MHz"
         put(top + 1 + chart_h, left, status, "status", right)

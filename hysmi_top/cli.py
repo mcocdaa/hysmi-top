@@ -136,6 +136,18 @@ def main(argv: list[str] | None = None) -> int:
         "--once", action="store_true", help="print a one-shot snapshot and exit (no TUI)"
     )
     parser.add_argument("--json", action="store_true", help="with --once, emit JSON")
+    parser.add_argument(
+        "--serve",
+        type=int,
+        metavar="PORT",
+        default=None,
+        help="run HTTP API, Prometheus exporter, and live Web Dashboard on PORT",
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="bind address for --serve (default: 127.0.0.1)",
+    )
     args = parser.parse_args(argv)
 
     device_ids = _parse_devices(args.devices) if args.devices else None
@@ -146,6 +158,17 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.once:
         return _snapshot(device_ids, args.json, demo=args.demo)
+
+    if args.serve is not None:
+        from .server import serve
+
+        return serve(
+            host=args.host,
+            port=args.serve,
+            device_ids=device_ids,
+            refresh_ms=args.refresh,
+            demo=args.demo,
+        )
 
     if not sys.stdout.isatty():
         print("hysmi-top needs a TTY; use --once for a text snapshot", file=sys.stderr)

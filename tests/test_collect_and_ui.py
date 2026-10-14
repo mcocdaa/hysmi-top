@@ -186,5 +186,117 @@ class UiRemediationTest(unittest.TestCase):
         self.assertIn(ANSI["mix"], ansi_out)
 
 
+class ServerAndWebDashboardTest(unittest.TestCase):
+    def test_http_server_snapshot_metrics_and_dashboard(self) -> None:
+        import threading
+        import urllib.request
+
+        from hysmi_top import server
+
+        fake_stats = [
+            collect.HcuStats(
+                hcu_id=0,
+                name="HCU 0",
+                util_percent=5.0,
+                vram_used=256 * 1024**2,
+                vram_total=64 * 1024**3,
+                temp_milli=42000,
+                power_uw=95_000_000,
+                sclk_hz=900_000_000,
+                mclk_hz=1600_000_000,
+            ),
+            collect.HcuStats(
+                hcu_id=1,
+                name="HCU 1",
+                util_percent=85.0,
+                vram_used=16 * 1024**3,
+                vram_total=64 * 1024**3,
+                temp_milli=68000,
+                power_uw=245_000_000,
+                sclk_hz=1500_000_000,
+                mclk_hz=1600_000_000,
+            ),
+        ]
+        fake_procs = [
+            collect.HcuProcess(pid=9001, device=1, name="vllm", memory=16384 * 1024**2),
+        ]
+
+        with (
+            mock.patch("hysmi_top.server.collect_all", return_value=fake_stats),
+            mock.patch("hysmi_top.server.read_processes", return_value=fake_procs),
+        ):
+            httpd = server.create_server("127.0.0.1", 0, device_ids=[0, 1], quiet=True)
+            t = threading.Thread(target=httpd.serve_forever, daemon=True)
+            t.start()
+            try:
+                base_url = f"http://127.0.0.1:{httpd.server_port}"
+
+                # 1. GET /api/v1/health
+                with urllib.request.urlopen(f"{base_url}/api/v1/health", timeout=5) as resp:
+                    self.assertEqual(resp.status, 200)
+                    health = json.loads(resp.read().decode("utf-8"))
+                self.assertEqual(health, {"status": "ok", "service": "hysmi-top"})
+
+                # 2. GET /api/v1/snapshot
+                with urllib.request.urlopen(f"{base_url}/api/v1/snapshot", timeout=5) as resp:
+                    self.assertEqual(resp.status, 200)
+                    snap = json.loads(resp.read().decode("utf-8"))
+                self.assertIn("timestamp", snap)
+                self.assertEqual(len(snap["devices"]), 2)
+                self.assertEqual(snap["devices"][0]["hcu_id"], 0)
+                self.assertEqual(snap["devices"][0]["gfx_util"], 5.0)
+                self.assertEqual(snap["devices"][0]["vram_used_mib"], 256.0)
+                self.assertEqual(len(snap["processes"]), 1)
+                self.assertEqual(snap["processes"][0]["pid"], 9001)
+                self.assertEqual(snap["processes"][0]["name"], "vllm")
+                self.assertEqual(snap["processes"][0]["memory_mib"], 16384.0)
+                summary = snap["summary"]
+                self.assertEqual(summary["total_devices"], 2)
+                self.assertEqual(summary["avg_gfx_util"], 45.0)
+                self.assertEqual(summary["total_vram_used_mib"], 256.0 + 16384.0)
+                self.assertEqual(summary["total_vram_total_mib"], 131072.0)
+                self.assertEqual(summary["idle_devices"], [0])
+
+                # 3. GET /metrics
+                with urllib.request.urlopen(f"{base_url}/metrics", timeout=5) as resp:
+                    self.assertEqual(resp.status, 200)
+                    metrics_txt = resp.read().decode("utf-8")
+                self.assertIn('hysmi_gfx_util_percent{device="0"} 5.0', metrics_txt)
+                self.assertIn('hysmi_gfx_util_percent{device="1"} 85.0', metrics_txt)
+                self.assertIn('hysmi_mem_used_mib{device="0"} 256.0', metrics_txt)
+                self.assertIn('hysmi_mem_total_mib{device="0"} 65536.0', metrics_txt)
+                self.assertIn('hysmi_temp_c{device="1"} 68.0', metrics_txt)
+                self.assertIn('hysmi_power_w{device="1"} 245.0', metrics_txt)
+                self.assertIn('hysmi_sclk_mhz{device="1"} 1500.0', metrics_txt)
+
+                # 4. GET /
+                with urllib.request.urlopen(f"{base_url}/", timeout=5) as resp:
+                    self.assertEqual(resp.status, 200)
+                    html = resp.read().decode("utf-8")
+                self.assertIn("hysmi-top Web Dashboard", html)
+                self.assertIn("fetch('/api/v1/snapshot')", html)
+                self.assertIn("/api/v1/snapshot", html)
+                self.assertIn("/metrics", html)
+            finally:
+                httpd.shutdown()
+                httpd.server_close()
+                t.join(timeout=2)
+
+    def test_cli_serve_argument_wiring(self) -> None:
+        with (
+            mock.patch("hysmi_top.cli.discover_devices", return_value=[]),
+            mock.patch("hysmi_top.server.serve", return_value=0) as mock_serve,
+        ):
+            rc = cli.main(["--serve", "9120", "--host", "127.0.0.1", "-r", "500"])
+        self.assertEqual(rc, 0)
+        mock_serve.assert_called_once_with(
+            host="127.0.0.1",
+            port=9120,
+            device_ids=[],
+            refresh_ms=500,
+            demo=False,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

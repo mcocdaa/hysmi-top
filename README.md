@@ -4,6 +4,16 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](file:///home/mcocdaa/AI_CODE/hysmi-top/LICENSE)
 [![Python: 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
+<div align="center">
+
+### 🎬 Live Terminal Demo
+
+<img src="docs/assets/demo_tui.gif" alt="hysmi-top Live 8x Hygon DCU Braille TUI Demo" width="900">
+
+*Real-time 8× Hygon DCU (`Z100L 64G`) telemetry: 2×4 Braille curve dashboard (`─HCU%`, `─VRAM%`, bold-blue `mix` overlap), single-card zoomed detail, interactive process sort, and compact cluster mode (`-c 2`).*
+
+</div>
+
 终端 GPU 监控工具，专为**海光 Hygon DCU（hy-smi）**设计：每张卡一张图，
 多条曲线（HCU 利用率、VRAM 占用）以**滚动线条**叠加显示，风格类似 nvtop。
 

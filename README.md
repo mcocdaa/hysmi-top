@@ -1,141 +1,71 @@
-# hysmi-top
-
-[![CI](https://github.com/mcocdaa/hysmi-top/actions/workflows/ci.yml/badge.svg)](https://github.com/mcocdaa/hysmi-top/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](file:///home/mcocdaa/AI_CODE/hysmi-top/LICENSE)
-[![Python: 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-
 <div align="center">
 
-### 🎬 Live Terminal Demo
+# hysmi-top
 
-<img src="docs/assets/demo_tui.gif" alt="hysmi-top Live 8x Hygon DCU Braille TUI Demo" width="900">
+**Zero-dependency Braille curve terminal monitor for Hygon DCU (`hy-smi`) accelerators.**
 
-*Real-time 8× Hygon DCU telemetry (`hysmi-top --once` snapshot & `hysmi-top --demo` live TUI): multi-column Braille curve dashboard (`─HCU%`, `─VRAM%`, bold-blue `mix` overlap) and interactive refresh speed control (`+/-`).*
+[![CI](https://github.com/mcocdaa/hysmi-top/actions/workflows/ci.yml/badge.svg)](https://github.com/mcocdaa/hysmi-top/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/mcocdaa/hysmi-top)](https://github.com/mcocdaa/hysmi-top/releases)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+[English](README.md) · [简体中文](README_CN.md)
+
+<img src="docs/assets/demo_tui.gif" alt="hysmi-top demo" width="840">
 
 </div>
 
-终端 GPU 监控工具，专为**海光 Hygon DCU（hy-smi）**设计：每张卡一张图，
-多条曲线（HCU 利用率、VRAM 占用）以**滚动线条**叠加显示，风格类似 nvtop。
+## ✨ Highlights
 
-零第三方依赖（仅 Python 标准库：`curses`），读取内核 sysfs 数据，无需
-root、不轮询起子进程。
+- **Zero External Dependencies** — Built solely on Python standard library (`curses`) and direct Linux kernel `sysfs` (`/sys/class/drm/cardN/device/`) telemetry reads with zero subprocess polling overhead.
+- **Smooth Braille Dual-Curve Overlay** — Plots real-time `─HCU%` (green) and `─VRAM%` (magenta) scrolling curves on the same chart, automatically merging overlapping points into a single bold-blue `mix` dot.
+- **Adaptive Multi-Column Pod Layout** — Dynamically scales chart height and column count (`1..N` pods per row with proportional spacing) to fit any terminal size on the fly.
+- **Hardware-Free `--demo` Mode** — Preview realistic 8-card Hygon DCU workload patterns (`sine`, `cosine`, `square`, `sawtooth`, `burst`, and overlap modes) anywhere without physical DCU hardware.
+- **Scriptable Telemetry Snapshots** — Export one-shot text (`--once`) or structured JSON (`--once --json`, including active `hy-smi --showpids` processes) for CI pipelines and cluster monitoring scripts.
 
-## 功能
+## 🚀 Quick Start
 
-- 多卡网格布局，每卡一个图表块，**自适应窗口尺寸**：曲线高度填满全部可用
-  屏幕空间，窗口矮时自动压缩曲线高度（Y 方向），仍放不下则增加每行列数
-  （X 方向），resize 后自动重排
-- 叠加滚动曲线：`─HCU%`（利用率，绿）与 `─VRAM%`（显存占用，品红）画在同一张图；
-  两线在同一单元格重合时合并为单个蓝色点，避免出现"双线"
-- 每个设备是一个 pod（表头/图例 + 曲线 + 状态行），pod 之间按终端宽度 ~10%
-  动态分配间距（`总宽×0.1 ÷ 间隙数`）
-- 曲线用盲文点阵渲染成平滑连续线条（非实体块），UTF-8 终端下自动启用
-- 每卡实时状态：利用率、显存用量/总量、温度、功耗
-- `--once` 文本快照与 `--json` 输出（含 `hy-smi --showpids` 进程信息），便于脚本化
-
-## 环境要求
-
-- 海光 DCU 服务器，驱动为 `hycu` 内核模块（系统含 `/opt/hyhal/bin/hy-smi`）
-- Python >= 3.9
-- 终端建议 UTF-8（非 UTF-8 自动回退为 `*` 折线）
-
-## 安装与运行
-
-### 方式一：使用 `uv` 安装（推荐，无 pip 环境首选）
-
-#### 1. 在线安装（联网环境推荐）
+**Run instantly without installing (`uvx`):**
 
 ```bash
-uv tool install git+https://github.com/mcocdaa/hysmi-top.git
-```
-> 安装后会自动将可执行文件加入 PATH，在任意路径直接输入 `hysmi-top` 即可启动。
-
-#### 2. 离线 / 内网服务器安装（无外网环境）
-
-海光 DCU 计算节点若无法访问外网：
-1. 在有网电脑上访问 [GitHub Releases](https://github.com/mcocdaa/hysmi-top/releases) 下载最新 Wheel 文件：
-   - 文件名：`hysmi_top-0.2.3-py3-none-any.whl`
-2. 将文件拷贝至目标服务器，执行安装：
-   ```bash
-   # 使用 uv tool 全局独立安装：
-   uv tool install ./hysmi_top-0.2.3-py3-none-any.whl
-
-   # 或者使用 uv pip 安装到当前环境/系统 Python：
-   uv pip install --system ./hysmi_top-0.2.3-py3-none-any.whl
-   ```
-
-#### 3. 免安装一次性运行（uvx）
-
-```bash
-# 直接在线拉取并启动：
 uvx --from git+https://github.com/mcocdaa/hysmi-top.git hysmi-top
-
-# 启动模拟演示 Demo（无物理 DCU 硬件也可查看交互）：
 uvx --from git+https://github.com/mcocdaa/hysmi-top.git hysmi-top --demo
 ```
 
-### 方式二：使用 `pip`
+**Install globally (`uv` / `pip`):**
 
 ```bash
-# 在线安装
-pip install git+https://github.com/mcocdaa/hysmi-top.git
-
-# 或安装下载的 wheel 包
-pip install hysmi_top-0.2.3-py3-none-any.whl
-
-# 运行
-hysmi-top
+uv tool install git+https://github.com/mcocdaa/hysmi-top.git
+# or: pip install git+https://github.com/mcocdaa/hysmi-top.git
 ```
 
-### 方式三：克隆源码运行
+**Offline install for air-gapped DCU clusters:**
+
+Download `hysmi_top-0.2.3-py3-none-any.whl` from [GitHub Releases](https://github.com/mcocdaa/hysmi-top/releases) and install on the target node:
 
 ```bash
-git clone https://github.com/mcocdaa/hysmi-top.git
-cd hysmi-top
-
-# 使用 uv
-uv run hysmi-top
-# 或直接用 python
-python3 -m hysmi_top
+uv tool install ./hysmi_top-0.2.3-py3-none-any.whl
 ```
 
-## 命令行参数
+## ⌨️ Usage & CLI Flags
 
 ```bash
-# 指定卡、刷新间隔、限制最大图表高度
-hysmi-top -d 0-3 -r 500 -c 4
-
-# 模拟演示模式（无需物理硬件，内置多种动态曲线）
-hysmi-top --demo
-
-# 文本快照 / JSON 导出（便于脚本采集与 CI）
-hysmi-top --once
-hysmi-top --once --json
+hysmi-top                      # Monitor all detected Hygon DCU cards
+hysmi-top -d 0-3 -r 500 -c 6   # Cards 0..3, 500ms refresh interval, max chart height 6 rows
+hysmi-top --demo               # Interactive 8-card simulated TUI demo
+hysmi-top --once               # Single-frame text summary to stdout
+hysmi-top --once --json        # Single-frame JSON telemetry + active processes
 ```
 
-键盘：`q` 退出，`+`/`-` 调整刷新速度。
+| Key / Flag | Description |
+| :--- | :--- |
+| `q` | Quit the interactive TUI |
+| `+` / `=` | Faster refresh rate (`-100ms`, down to `100ms`) |
+| `-` / `_` | Slower refresh rate (`+100ms`, up to `10000ms`) |
+| `-d, --devices` | Comma/range list of HCU IDs, e.g. `0,2-4` (default: all) |
+| `-r, --refresh` | Refresh interval in milliseconds (default: `1000`) |
+| `-c, --chart-height` | Cap on curve chart height in rows (default: auto-fill) |
 
-## 可视化曲线检查工具
+## 📄 License
 
-针对不同终端分辨率与多种曲线形态，提供了无硬件依赖的可视化检查脚本：
-
-```bash
-# 检查终端排版效果（支持自定义宽高，如 16 行 90 列）
-python3 tests/visual_test.py 16 90
-
-# 查看各种经典曲线独立模式（交叉、动态完全重合、阶梯、紧凑高度对比等）
-python3 tests/visual_test.py --patterns
-```
-
-## 测试
-
-```bash
-python3 -m unittest discover -s tests
-```
-
-## 数据来源
-
-- 每卡指标：`/sys/class/drm/cardN/device/` 下的 `gpu_busy_percent`、
-  `mem_info_vram_used/total`、`hwmon/*/temp1_input`、`power1_average`、
-  `freq1_input`、`freq2_input`（与 hy-smi 同源，直读更快）
-- 进程（仅 `--once`/`--json` 快照）：`hy-smi --showpids`
+Released under the [MIT License](LICENSE).

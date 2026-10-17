@@ -10,7 +10,7 @@
 
 <img src="docs/assets/demo_tui.gif" alt="hysmi-top Live 8x Hygon DCU Braille TUI Demo" width="900">
 
-*Real-time 8× Hygon DCU (`Z100L 64G`) telemetry: 2×4 Braille curve dashboard (`─HCU%`, `─VRAM%`, bold-blue `mix` overlap), single-card zoomed detail, interactive process sort, and compact cluster mode (`-c 2`).*
+*Real-time 8× Hygon DCU telemetry (`hysmi-top --once` snapshot & `hysmi-top --demo` live TUI): multi-column Braille curve dashboard (`─HCU%`, `─VRAM%`, bold-blue `mix` overlap) and interactive refresh speed control (`+/-`).*
 
 </div>
 

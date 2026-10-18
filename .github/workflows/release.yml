@@ -1,0 +1,112 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint & Format Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Run Ruff Check
+        run: uv run --frozen ruff check .
+
+      - name: Run Ruff Format Check
+        run: uv run --frozen ruff format --check .
+
+      - name: Run Mypy
+        run: uv run --frozen mypy hysmi_top tests
+
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Run Unit Tests
+        run: uv run --no-dev --python ${{ matrix.python-version }} python -m unittest discover -s tests
+
+  build:
+    name: Build Packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Verify version matches git tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          uv run --no-dev python -c "import os, tomllib, hysmi_top; expected = os.environ['GITHUB_REF_NAME'].lstrip('v'); pv = tomllib.load(open('pyproject.toml', 'rb'))['project']['version']; iv = hysmi_top.__version__; assert pv == expected and iv == expected, f'pyproject.toml={pv}, __init__.py={iv}, expected={expected}'"
+
+      - name: Build wheel and sdist
+        run: uv build
+
+      - name: Verify build artifacts
+        run: ls -la dist/
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  release:
+    name: Create GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [lint, test, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+          generate_release_notes: true

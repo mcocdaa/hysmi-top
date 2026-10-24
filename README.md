@@ -41,10 +41,10 @@ uv tool install git+https://github.com/mcocdaa/hysmi-top.git
 
 **Offline install for air-gapped DCU clusters:**
 
-Download `hysmi_top-0.2.3-py3-none-any.whl` from [GitHub Releases](https://github.com/mcocdaa/hysmi-top/releases) and install on the target node:
+Download `hysmi_top-0.2.4-py3-none-any.whl` from [GitHub Releases](https://github.com/mcocdaa/hysmi-top/releases) and install on the target node:
 
 ```bash
-uv tool install ./hysmi_top-0.2.3-py3-none-any.whl
+uv tool install ./hysmi_top-0.2.4-py3-none-any.whl
 ```
 
 ## ⌨️ Usage & CLI Flags

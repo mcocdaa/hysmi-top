@@ -41,10 +41,10 @@ uv tool install git+https://github.com/mcocdaa/hysmi-top.git
 
 **内网 / 离线 DCU 集群安装（Wheel）：**
 
-从 [GitHub Releases](https://github.com/mcocdaa/hysmi-top/releases) 下载 `hysmi_top-0.2.3-py3-none-any.whl` 并拷贝至目标计算节点：
+从 [GitHub Releases](https://github.com/mcocdaa/hysmi-top/releases) 下载 `hysmi_top-0.2.4-py3-none-any.whl` 并拷贝至目标计算节点：
 
 ```bash
-uv tool install ./hysmi_top-0.2.3-py3-none-any.whl
+uv tool install ./hysmi_top-0.2.4-py3-none-any.whl
 ```
 
 ## ⌨️ 常用命令与快捷键

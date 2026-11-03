@@ -17,6 +17,13 @@ updates:
       uv-minor-patch:
         patterns: ['*']
         update-types: ['minor', 'patch']
+    ignore:
+      - dependency-name: "mypy"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "pytest"
+        update-types:
+          - "version-update:semver-major"
     commit-message:
       prefix: 'chore(deps)'
 

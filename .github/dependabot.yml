@@ -21,6 +21,7 @@ updates:
       - dependency-name: "mypy"
         update-types:
           - "version-update:semver-major"
+          - "version-update:semver-minor"
       - dependency-name: "pytest"
         update-types:
           - "version-update:semver-major"
